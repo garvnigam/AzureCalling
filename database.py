@@ -1,0 +1,58 @@
+from supabase import create_client, Client
+import os
+from datetime import datetime
+from typing import Optional
+import uuid
+
+
+class Database:
+    def __init__(self):
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_KEY")
+        self.client: Client = create_client(url, key)
+
+    async def create_call(self, user_id: str, agent_id: str,
+                          twilio_sid: str, direction: str) -> str:
+        call_id = str(uuid.uuid4())
+        data = {
+            "id": call_id,
+            "user_id": user_id,
+            "agent_id": agent_id,
+            "twilio_call_sid": twilio_sid,
+            "direction": direction,
+            "status": "initiated",
+            "started_at": datetime.utcnow().isoformat(),
+        }
+        self.client.table("calls").insert(data).execute()
+        return call_id
+
+    async def save_turn(self, call_id: str, turn_num: int,
+                        speaker: str, text: str):
+        self.client.table("conversation_turns").insert({
+            "call_id": call_id,
+            "turn_number": turn_num,
+            "speaker": speaker,
+            "text": text,
+        }).execute()
+
+    async def end_call(self, call_id: str, transcript: str,
+                       extracted_data: dict, duration: int):
+        self.client.table("calls").update({
+            "status": "completed",
+            "transcript": transcript,
+            "extracted_data": extracted_data,
+            "lead_score": extracted_data.get("lead_score", 0),
+            "duration_seconds": duration,
+            "ended_at": datetime.utcnow().isoformat(),
+        }).eq("id", call_id).execute()
+
+    async def get_agent(self, agent_id: str):
+        result = self.client.table("agents").select("*").eq(
+            "id", agent_id).single().execute()
+        return result.data
+
+    async def get_user_calls(self, user_id: str, limit: int = 50):
+        result = self.client.table("calls").select("*").eq(
+            "user_id", user_id).order(
+            "created_at", desc=True).limit(limit).execute()
+        return result.data
