@@ -63,7 +63,7 @@ Extract these fields (use null if not mentioned):
 Return ONLY valid JSON, no explanation.
 """
     response = await client.chat.completions.create(
-        model="llama-3.1-70b-versatile",
+        model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": extraction_prompt}],
         temperature=0.1,
         response_format={"type": "json_object"},
