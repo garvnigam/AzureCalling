@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 app = FastAPI(title="AI Calling Agent")
-db = Database()
+db = Database()  # safe — load_dotenv() already ran above
 
 
 @app.get("/")

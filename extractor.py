@@ -1,4 +1,5 @@
 import json
+import os
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from enum import Enum
@@ -39,7 +40,7 @@ class RealEstateLead(BaseModel):
 
 
 async def extract_lead_info(transcript: str) -> RealEstateLead:
-    client = AsyncGroq()
+    client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
     extraction_prompt = f"""
 Analyze this real estate call transcript and extract information in JSON format.
 
@@ -58,7 +59,6 @@ Extract these fields (use null if not mentioned):
 - interested: true/false
 - call_summary: 2-sentence summary
 - next_action: Recommendation for sales team
-- lead_score: 0-100 based on: budget clarity, timeline urgency, engagement
 
 Return ONLY valid JSON, no explanation.
 """
@@ -69,7 +69,9 @@ Return ONLY valid JSON, no explanation.
         response_format={"type": "json_object"},
     )
     data = json.loads(response.choices[0].message.content)
-    return RealEstateLead(**data)
+    lead = RealEstateLead(**data)
+    lead.lead_score = calculate_lead_score(lead)
+    return lead
 
 
 def calculate_lead_score(lead: RealEstateLead) -> int:

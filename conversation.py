@@ -6,7 +6,7 @@ from database import Database
 import asyncio
 import base64
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class ConversationOrchestrator:
@@ -20,12 +20,13 @@ class ConversationOrchestrator:
         self.tts = EdgeTTS(voice="en-IN-NeerjaNeural")
         self.transcript_log = []
         self.turn_count = 0
-        self.start_time = datetime.utcnow()
+        self.start_time = datetime.now(timezone.utc)
         self.is_speaking = False
 
     async def start(self):
         await self.stt.start_stream(on_transcript=self.on_user_speech)
-        greeting = "Hello! This is Priya from ABC Real Estate. Am I speaking with the right person?"
+        company = os.getenv("COMPANY_NAME", "ABC Real Estate")
+        greeting = f"Hello! This is Priya from {company}. Am I speaking with the right person?"
         await self.speak(greeting)
 
     async def process_audio(self, audio_bytes):
@@ -64,7 +65,7 @@ class ConversationOrchestrator:
             self.is_speaking = False
 
     async def end_call(self):
-        duration = (datetime.utcnow() - self.start_time).seconds
+        duration = (datetime.now(timezone.utc) - self.start_time).seconds
         full_transcript = "\n".join(self.transcript_log)
         try:
             lead_data = await extract_lead_info(full_transcript)
