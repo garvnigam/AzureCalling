@@ -2,7 +2,7 @@ import os
 from groq import AsyncGroq
 
 _AGENT_NAME = os.getenv("AGENT_NAME", "Shyam Dhar Dubey")
-_COMPANY = os.getenv("COMPANY_NAME", "Elite Realty")
+_COMPANY = os.getenv("COMPANY_NAME", "GSAssociates")
 
 SYSTEM_PROMPT = f"""
 You are {_AGENT_NAME}, a professional real estate sales consultant at {_COMPANY}, specializing in residential properties in Greater Noida, Uttar Pradesh.

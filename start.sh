@@ -11,6 +11,13 @@ echo "║   Elite Realty, Greater Noida        ║"
 echo "╚══════════════════════════════════════╝"
 echo ""
 
+PHONE_NUMBER=""
+for arg in "$@"; do
+    case "$arg" in
+        --call=*) PHONE_NUMBER="${arg#--call=}" ;;
+    esac
+done
+
 cd "$SCRIPT_DIR"
 
 # ── Activate venv ──────────────────────────────────────────────────────────
@@ -23,17 +30,18 @@ source venv/bin/activate
 # ── Kill existing server ───────────────────────────────────────────────────
 echo "▶  Clearing port 8000..."
 lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+pkill -f "ngrok http" 2>/dev/null || true
 sleep 1
 
-# ── Start cloudflared FIRST so we get the URL before booting the server ───
-echo "▶  Starting cloudflared tunnel..."
-cloudflared tunnel --url http://localhost:8000 --protocol http2 > "$LOG_DIR/cloudflared.log" 2>&1 &
-CF_PID=$!
+# ── Start ngrok tunnel ─────────────────────────────────────────────────────
+echo "▶  Starting ngrok tunnel..."
+ngrok http 8000 --log=stdout > "$LOG_DIR/ngrok.log" 2>&1 &
+TUNNEL_PID=$!
 
 echo "   Waiting for public URL..."
 PUBLIC_URL=""
-for i in $(seq 1 40); do
-    PUBLIC_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$LOG_DIR/cloudflared.log" 2>/dev/null | head -1)
+for i in $(seq 1 30); do
+    PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | python3 -c "import sys,json; t=json.load(sys.stdin).get('tunnels',[]); print(t[0]['public_url'] if t else '')" 2>/dev/null)
     if [ -n "$PUBLIC_URL" ]; then
         break
     fi
@@ -41,8 +49,8 @@ for i in $(seq 1 40); do
 done
 
 if [ -z "$PUBLIC_URL" ]; then
-    echo "ERROR: Could not get cloudflared URL."
-    kill $CF_PID 2>/dev/null
+    echo "ERROR: Could not get ngrok URL. Check $LOG_DIR/ngrok.log"
+    kill $TUNNEL_PID 2>/dev/null
     exit 1
 fi
 
@@ -76,21 +84,10 @@ done
 if [ $READY -eq 0 ]; then
     echo "ERROR: Server did not start. Logs:"
     cat "$LOG_DIR/server.log"
-    kill $UVICORN_PID $CF_PID 2>/dev/null
+    kill $UVICORN_PID $TUNNEL_PID 2>/dev/null
     exit 1
 fi
 echo "   Server ready ✓"
-
-# ── Wait for DNS to resolve before opening browser ─────────────────────────
-DOMAIN=$(echo "$PUBLIC_URL" | sed 's|https://||')
-echo "▶  Waiting for DNS ($DOMAIN)..."
-for i in $(seq 1 30); do
-    if host "$DOMAIN" > /dev/null 2>&1; then
-        echo "   DNS resolved ✓"
-        break
-    fi
-    sleep 2
-done
 
 DASHBOARD_URL="$PUBLIC_URL/dashboard"
 
@@ -105,6 +102,15 @@ echo "╚═══════════════════════�
 echo ""
 echo "   Opening dashboard..."
 open "$DASHBOARD_URL"
+
+# ── Place outbound call if --call flag was provided ────────────────────────
+if [ -n "$PHONE_NUMBER" ]; then
+    echo ""
+    echo "▶  Placing outbound call to $PHONE_NUMBER..."
+    python telephony.py "$PHONE_NUMBER"
+    echo ""
+fi
+
 echo "   Press Ctrl+C to stop everything."
 echo ""
 
@@ -112,8 +118,8 @@ echo ""
 cleanup() {
     echo ""
     echo "▶  Shutting down..."
-    kill $UVICORN_PID $CF_PID 2>/dev/null
-    wait $UVICORN_PID $CF_PID 2>/dev/null
+    kill $UVICORN_PID $TUNNEL_PID 2>/dev/null
+    wait $UVICORN_PID $TUNNEL_PID 2>/dev/null
     echo "   Done."
     exit 0
 }

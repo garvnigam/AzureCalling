@@ -31,7 +31,11 @@ class ConversationOrchestrator:
     async def start(self):
         await self._emit({"type": "call_started", "call_id": self.call_id,
                           "timestamp": datetime.now(timezone.utc).isoformat()})
-        await self.stt.start_stream(on_transcript=self.on_user_speech)
+        try:
+            await self.stt.start_stream(on_transcript=self.on_user_speech)
+        except Exception as e:
+            print(f"[stt] Failed to start stream (continuing): {e}")
+            import traceback; traceback.print_exc()
         agent = os.getenv("AGENT_NAME", "Shyam Dhar Dubey")
         company = os.getenv("COMPANY_NAME", "Elite Realty")
         greeting = (
@@ -40,7 +44,11 @@ class ConversationOrchestrator:
             f"We are a real estate consultancy specializing in properties in Greater Noida. "
             f"Is this a good time to talk?"
         )
-        await self.speak(greeting)
+        try:
+            await self.speak(greeting)
+        except Exception as e:
+            print(f"[speak] Failed to speak greeting: {e}")
+            import traceback; traceback.print_exc()
 
     async def process_audio(self, audio_bytes):
         if not self.is_speaking:
@@ -75,7 +83,9 @@ class ConversationOrchestrator:
                           "speaker": "agent", "text": text,
                           "timestamp": datetime.now(timezone.utc).isoformat()})
         try:
+            print(f"[tts] Synthesizing {len(text)} chars...")
             audio_bytes = await self.tts.synthesize(text)
+            print(f"[tts] Got {len(audio_bytes)} bytes of audio")
             chunk_size = 320
             for i in range(0, len(audio_bytes), chunk_size):
                 chunk = audio_bytes[i:i + chunk_size]
@@ -86,6 +96,10 @@ class ConversationOrchestrator:
                     "media": {"payload": payload},
                 })
                 await asyncio.sleep(0.02)
+            print(f"[tts] Finished sending audio")
+        except Exception as e:
+            print(f"[speak] TTS/send error: {e}")
+            import traceback; traceback.print_exc()
         finally:
             self.is_speaking = False
 
