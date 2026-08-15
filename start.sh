@@ -6,7 +6,7 @@ mkdir -p "$LOG_DIR"
 
 echo ""
 echo "╔══════════════════════════════════════╗"
-echo "║   AI Calling Agent — Shyam Dhar      ║"
+echo "║   AI Calling Agent — Gaurav Kumar Nigam      ║"
 echo "║   Elite Realty, Greater Noida        ║"
 echo "╚══════════════════════════════════════╝"
 echo ""

@@ -69,6 +69,11 @@ Return ONLY valid JSON, no explanation.
         response_format={"type": "json_object"},
     )
     data = json.loads(response.choices[0].message.content)
+    # Coerce list fields to single values
+    if isinstance(data.get("bhk"), list):
+        data["bhk"] = data["bhk"][0] if data["bhk"] else None
+    if isinstance(data.get("locations"), str):
+        data["locations"] = [data["locations"]]
     lead = RealEstateLead(**data)
     lead.lead_score = calculate_lead_score(lead)
     return lead
