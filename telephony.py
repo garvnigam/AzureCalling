@@ -1,7 +1,7 @@
-from twilio.rest import Client
-from dotenv import load_dotenv
 import os
 import sys
+from dotenv import load_dotenv
+from services.call_service import make_outbound_call
 
 load_dotenv()
 
@@ -11,15 +11,11 @@ if not public_url:
 
 phone = sys.argv[1] if len(sys.argv) > 1 else "+919131405229"
 
-client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
-
-call = client.calls.create(
+sid = make_outbound_call(
     to=phone,
-    from_=os.getenv("TWILIO_PHONE_NUMBER"),
-    url=f"{public_url}/incoming-call",
-    status_callback=f"{public_url}/call-status",
-    status_callback_event=["completed"],
+    from_number=os.getenv("TWILIO_PHONE_NUMBER"),
+    base_url=public_url,
 )
 
-print("Call SID:", call.sid)
-print("Status:  ", call.status)
+print("Call SID:", sid)
+print("Status:  initiated")

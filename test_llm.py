@@ -1,7 +1,7 @@
 import asyncio
 from dotenv import load_dotenv
 load_dotenv()
-from llm import LLMBrain
+from services.llm_service import LLMBrain
 
 async def main():
     brain = LLMBrain()

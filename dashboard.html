@@ -317,6 +317,10 @@
   .add-row .form-group { margin-bottom: 0; flex: 1; }
   .add-row .form-group input { padding: 8px 12px; font-size: 13px; }
   .btn.sm { padding: 8px 14px; font-size: 12px; border-radius: 8px; flex-shrink: 0; }
+  .whatsapp-btn { background: #25d366; box-shadow: 0 4px 15px rgba(37, 211, 102, 0.25); }
+  .whatsapp-btn:hover { box-shadow: 0 6px 25px rgba(37, 211, 102, 0.4); }
+  textarea { width: 100%; background: var(--user-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-family: inherit; font-size: 13px; resize: vertical; }
+  textarea:focus { outline: none; border-color: var(--border-glow); }
 
   .manage-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); font-weight: 600; margin-bottom: 8px; margin-top: 16px; }
   .manage-section-title:first-child { margin-top: 0; }
@@ -430,8 +434,8 @@
   <div class="section-title">Call History</div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Time</th><th>Direction</th><th>Duration</th><th>Score</th><th>Status</th></tr></thead>
-      <tbody id="history-body"><tr class="no-rows"><td colspan="5">Loading…</td></tr></tbody>
+      <thead><tr><th>Time</th><th>Direction</th><th>Duration</th><th>Score</th><th>Status</th><th>WhatsApp</th></tr></thead>
+      <tbody id="history-body"><tr class="no-rows"><td colspan="6">Loading…</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -490,6 +494,28 @@
       </div>
     </div>
 
+    <!-- Screen 3: Send WhatsApp -->
+    <div class="modal-screen" id="screen-whatsapp">
+      <h2>💬 Send WhatsApp Message</h2>
+      <div class="form-group">
+        <label>To (Phone)</label>
+        <input type="tel" id="wa-phone" placeholder="+919131405229">
+      </div>
+      <div class="form-group">
+        <label>Message</label>
+        <textarea id="wa-message" rows="4" placeholder="Type a message, or click ✨ Generate with AI"></textarea>
+      </div>
+      <div id="wa-error" style="color:var(--red);font-size:13px;display:none;margin-bottom:8px;padding:8px 12px;background:rgba(248,113,113,0.08);border-radius:8px;"></div>
+      <div id="wa-ok" style="color:var(--green);font-size:13px;display:none;margin-bottom:8px;padding:8px 12px;background:rgba(52,211,153,0.08);border-radius:8px;"></div>
+      <div class="modal-actions" style="justify-content:space-between;align-items:center;">
+        <button class="btn secondary" onclick="showScreen('call')">← Back</button>
+        <div style="display:flex;gap:10px;">
+          <button class="btn secondary" id="wa-gen-btn" onclick="generateWhatsApp()">✨ Generate with AI</button>
+          <button class="btn" onclick="sendWhatsApp()">Send</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -500,7 +526,7 @@
   const transcriptBox = document.getElementById('transcript-box');
   const transcriptCard = document.getElementById('transcript-card');
   const emptyMsg = document.getElementById('empty-msg');
-  let ws = null, reconnectTimer = null;
+  let ws = null, reconnectTimer = null, historyCache = [], currentWaIdx = -1;
 
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -588,12 +614,16 @@
     const tbody = document.getElementById('history-body');
     try {
       const res = await fetch('/api/calls'); const calls = await res.json();
-      if (!calls || !calls.length) { tbody.innerHTML = '<tr class="no-rows"><td colspan="5">No calls yet</td></tr>'; return; }
-      tbody.innerHTML = calls.map(c => {
+      if (!calls || !calls.length) { tbody.innerHTML = '<tr class="no-rows"><td colspan="6">No calls yet</td></tr>'; return; }
+      historyCache = calls;
+      tbody.innerHTML = calls.map((c, i) => {
         const t = c.started_at ? new Date(c.started_at).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
-        return `<tr><td>${t}</td><td style="text-transform:capitalize">${c.direction||'—'}</td><td>${c.duration_seconds?formatDuration(c.duration_seconds):'—'}</td><td>${c.lead_score!=null?c.lead_score+'/100':'—'}</td><td><span class="chip ${c.status||'unknown'}">${c.status||'unknown'}</span></td></tr>`;
+        const waBtn = c.lead_phone
+          ? `<button class="btn sm whatsapp-btn" onclick="openWhatsApp(${i})">WhatsApp</button>`
+          : '<span style="color:var(--muted);font-size:11px">—</span>';
+        return `<tr><td>${t}</td><td style="text-transform:capitalize">${c.direction||'—'}</td><td>${c.duration_seconds?formatDuration(c.duration_seconds):'—'}</td><td>${c.lead_score!=null?c.lead_score+'/100':'—'}</td><td><span class="chip ${c.status||'unknown'}">${c.status||'unknown'}</span></td><td>${waBtn}</td></tr>`;
       }).join('');
-    } catch(e) { tbody.innerHTML = '<tr class="no-rows"><td colspan="5">Error loading</td></tr>'; }
+    } catch(e) { tbody.innerHTML = '<tr class="no-rows"><td colspan="6">Error loading</td></tr>'; }
   }
 
   // ── Number management (localStorage) ──────────────────────────────────────
@@ -664,8 +694,62 @@
   function showScreen(name) {
     document.getElementById('screen-call').classList.toggle('active', name === 'call');
     document.getElementById('screen-manage').classList.toggle('active', name === 'manage');
+    document.getElementById('screen-whatsapp').classList.toggle('active', name === 'whatsapp');
     if (name === 'manage') { renderList('twilio-list', 'twilio'); renderList('target-list', 'target'); }
     if (name === 'call')   { populateSelect('from-select', 'twilio'); populateSelect('to-select', 'target'); }
+  }
+
+  // ── WhatsApp ──────────────────────────────────────────────────────────────
+  function openWhatsApp(idx) {
+    const c = historyCache[idx];
+    document.getElementById('wa-phone').value = (c && c.lead_phone) || '';
+    document.getElementById('wa-message').value = '';
+    document.getElementById('wa-error').style.display = 'none';
+    document.getElementById('wa-ok').style.display = 'none';
+    currentWaIdx = idx;
+    showScreen('whatsapp');
+  }
+
+  async function generateWhatsApp() {
+    const errEl = document.getElementById('wa-error');
+    const okEl = document.getElementById('wa-ok');
+    errEl.style.display = 'none'; okEl.style.display = 'none';
+    const c = historyCache[currentWaIdx];
+    if (!c || !c.transcript) { errEl.textContent = 'No transcript available for this call'; errEl.style.display = 'block'; return; }
+    const btn = document.getElementById('wa-gen-btn');
+    btn.textContent = 'Generating…'; btn.disabled = true;
+    try {
+      const res = await fetch('/api/generate-whatsapp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: c.transcript, lead: c }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error ' + res.status);
+      document.getElementById('wa-message').value = data.message;
+    } catch(e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
+    finally { btn.textContent = '✨ Generate with AI'; btn.disabled = false; }
+  }
+
+  async function sendWhatsApp() {
+    const errEl = document.getElementById('wa-error');
+    const okEl = document.getElementById('wa-ok');
+    errEl.style.display = 'none'; okEl.style.display = 'none';
+    const phone = document.getElementById('wa-phone').value.trim();
+    const message = document.getElementById('wa-message').value.trim();
+    if (!phone) { errEl.textContent = 'Enter a phone number'; errEl.style.display = 'block'; return; }
+    if (!message) { errEl.textContent = 'Type a message or generate one with AI'; errEl.style.display = 'block'; return; }
+    const btn = document.querySelector('#screen-whatsapp .btn:not(.secondary)');
+    btn.textContent = 'Sending…'; btn.disabled = true;
+    try {
+      const res = await fetch('/api/send-whatsapp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, message }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error ' + res.status);
+      okEl.textContent = '✓ Message sent (sid: ' + data.sid + ')'; okEl.style.display = 'block';
+    } catch(e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
+    finally { btn.textContent = 'Send'; btn.disabled = false; }
   }
 
   function openModal() {
