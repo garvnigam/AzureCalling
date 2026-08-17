@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, WebSocket, Request, WebSocketDisconnect, Depends
+from fastapi import FastAPI, WebSocket, Request, WebSocketDisconnect, Depends, HTTPException
 from fastapi.responses import Response, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from services.logger import setup_logging, get_logger
@@ -92,7 +92,6 @@ async def health():
 
 @app.post("/api/auth/login")
 async def login(request: Request):
-    from fastapi import HTTPException
     from services.auth_service import authenticate_local
     body = await request.json()
     username = (body.get("username") or body.get("email") or "").strip().lower()
@@ -116,6 +115,39 @@ async def login(request: Request):
 @app.get("/api/auth/me")
 async def me(user: dict = Depends(get_current_user)):
     return {"id": user["id"], "username": user.get("email"), "email": user.get("email"), "name": user.get("name")}
+
+
+@app.post("/api/auth/signup")
+async def signup(request: Request):
+    import re as _re
+    from services.auth_service import hash_password
+    body = await request.json()
+    username = (body.get("username") or "").strip().lower()
+    password = body.get("password") or ""
+    confirm = body.get("confirm_password") or ""
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="username and password are required")
+    if len(username) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
+    if not _re.match(r"^[a-z0-9._-]+$", username):
+        raise HTTPException(status_code=400, detail="Username can only contain letters, numbers, dots, underscores and hyphens")
+    if not _re.match(r"^(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$", password):
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters with at least one number and one special character")
+    if password != confirm:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+    if username in ("gknsngr7", "shyam098"):
+        raise HTTPException(status_code=409, detail="Username already taken")
+    existing = await db.get_user_by_email(username)
+    if existing:
+        raise HTTPException(status_code=409, detail="Username already taken")
+    try:
+        user_id = await db.create_user(username, username, hash_password(password))
+    except Exception as e:
+        log.error("signup DB error for %s: %s", username, str(e)[:120])
+        raise HTTPException(status_code=500, detail="Database error — run supabase_migration.sql in Supabase SQL Editor first")
+    token = create_token(user_id, username, name=username)
+    log.info("signup OK: %s", username)
+    return {"token": token, "user": {"id": user_id, "username": username, "email": username, "name": username, "source": "db"}}
 
 
 @app.websocket("/ws/dashboard")
