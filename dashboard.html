@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Calling Agent – Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0b10;
+    --surface: #12141d;
+    --surface-2: #1a1d2b;
+    --border: #1f2233;
+    --border-glow: #2d3154;
+    --text: #eef0f6;
+    --text-secondary: #8b92ab;
+    --muted: #5a6180;
+    --accent: #7c5cfc;
+    --accent-2: #5b8def;
+    --accent-glow: rgba(124, 92, 252, 0.15);
+    --green: #34d399;
+    --green-glow: rgba(52, 211, 153, 0.12);
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --user-bg: #151927;
+    --agent-bg: #1a1535;
+    --gradient-1: linear-gradient(135deg, #7c5cfc 0%, #5b8def 100%);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(circle at 30% 20%, rgba(124, 92, 252, 0.04) 0%, transparent 50%),
+                radial-gradient(circle at 70% 80%, rgba(91, 141, 239, 0.03) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    background: rgba(18, 20, 29, 0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    z-index: 10;
+  }
+
+  .logo-group { display: flex; align-items: center; gap: 12px; }
+
+  .logo-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: var(--gradient-1);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 4px 20px rgba(124, 92, 252, 0.3);
+  }
+
+  header h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
+  header h1 span { color: var(--text-secondary); font-weight: 400; font-size: 13px; margin-left: 8px; }
+
+  .header-right { display: flex; align-items: center; gap: 20px; }
+
+  .status-pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted);
+    transition: all 0.3s ease;
+  }
+  .status-dot.connected {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s infinite;
+  }
+  .status-dot.disconnected { background: var(--red); }
+
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  .btn {
+    background: var(--gradient-1);
+    color: #fff; border: none;
+    padding: 10px 20px; border-radius: 10px;
+    cursor: pointer; font-size: 13px; font-weight: 600; font-family: inherit;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 15px rgba(124, 92, 252, 0.25);
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 6px 25px rgba(124, 92, 252, 0.4); }
+  .btn:active { transform: translateY(0); }
+  .btn.secondary {
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--text-secondary); box-shadow: none;
+  }
+  .btn.secondary:hover { border-color: var(--border-glow); color: var(--text); transform: none; box-shadow: none; }
+
+  .main {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 20px;
+    padding: 24px 32px;
+    height: calc(100vh - 73px - 320px);
+    min-height: 340px;
+    z-index: 1;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    transition: border-color 0.3s ease;
+  }
+  .card:hover { border-color: var(--border-glow); }
+  .card.active-call { border-color: rgba(124, 92, 252, 0.4); box-shadow: 0 0 40px rgba(124, 92, 252, 0.08); }
+
+  .card-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface-2);
+  }
+
+  .card-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); }
+
+  .badge { padding: 4px 12px; border-radius: 99px; font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
+  .badge.active { background: var(--green-glow); color: var(--green); border: 1px solid rgba(52, 211, 153, 0.2); }
+  .badge.idle { background: rgba(90, 97, 128, 0.1); color: var(--muted); border: 1px solid var(--border); }
+
+  #transcript-box {
+    flex: 1; overflow-y: auto; padding: 16px 20px;
+    display: flex; flex-direction: column; gap: 12px;
+    scroll-behavior: smooth;
+  }
+  #transcript-box::-webkit-scrollbar { width: 4px; }
+  #transcript-box::-webkit-scrollbar-track { background: transparent; }
+  #transcript-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .turn { display: flex; gap: 10px; max-width: 85%; animation: slideIn 0.3s ease; }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .turn.user { align-self: flex-start; }
+  .turn.agent { align-self: flex-end; flex-direction: row-reverse; }
+
+  .turn-avatar {
+    width: 28px; height: 28px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; flex-shrink: 0; margin-top: 2px;
+  }
+  .turn.user .turn-avatar { background: var(--user-bg); border: 1px solid var(--border); }
+  .turn.agent .turn-avatar { background: var(--accent-glow); border: 1px solid rgba(124, 92, 252, 0.3); }
+
+  .turn-content { display: flex; flex-direction: column; gap: 3px; }
+
+  .turn-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); padding: 0 2px; }
+  .turn.agent .turn-label { text-align: right; }
+
+  .turn-bubble { padding: 10px 14px; border-radius: 12px; line-height: 1.6; font-size: 13px; }
+  .turn.user .turn-bubble { background: var(--user-bg); border: 1px solid var(--border); border-top-left-radius: 4px; }
+  .turn.agent .turn-bubble { background: var(--agent-bg); border: 1px solid rgba(124, 92, 252, 0.15); border-top-right-radius: 4px; }
+
+  .empty-transcript {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px;
+    color: var(--muted); font-size: 13px;
+  }
+  .empty-icon {
+    width: 48px; height: 48px; border-radius: 14px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-size: 22px;
+  }
+
+  #lead-panel {
+    padding: 20px; overflow-y: auto;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  #lead-panel::-webkit-scrollbar { width: 4px; }
+  #lead-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .lead-row {
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 10px 12px;
+    background: var(--surface-2); border-radius: 10px;
+    border: 1px solid var(--border);
+    transition: border-color 0.2s ease;
+  }
+  .lead-row:hover { border-color: var(--border-glow); }
+  .lead-row.full-width { grid-column: 1 / -1; }
+
+  .lead-key { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
+  .lead-val { font-size: 14px; color: var(--text); font-weight: 500; }
+  .lead-val.empty { color: var(--muted); font-style: italic; font-weight: 400; }
+
+  .score-container { margin-top: 6px; }
+  .score-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .score-fill {
+    height: 100%; border-radius: 3px;
+    background: var(--gradient-1);
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 0%;
+    box-shadow: 0 0 10px rgba(124, 92, 252, 0.4);
+  }
+
+  .history-section { position: relative; padding: 0 32px 32px; z-index: 1; }
+  .section-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); margin-bottom: 16px; }
+
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    padding: 14px 18px; text-align: left; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted);
+    border-bottom: 1px solid var(--border); background: var(--surface-2);
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s ease; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(124, 92, 252, 0.03); }
+  tbody td { padding: 12px 18px; color: var(--text); font-size: 13px; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 600;
+  }
+  .chip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+  .chip.completed { background: var(--green-glow); color: var(--green); }
+  .chip.completed::before { background: var(--green); }
+  .chip.initiated { background: rgba(251, 191, 36, 0.1); color: var(--yellow); }
+  .chip.initiated::before { background: var(--yellow); }
+  .chip.failed { background: rgba(248, 113, 113, 0.1); color: var(--red); }
+  .chip.failed::before { background: var(--red); }
+
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center; z-index: 1000;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 28px; width: 400px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 80px rgba(124, 92, 252, 0.08);
+    animation: modalIn 0.25s ease;
+  }
+  @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+  .modal h2 { font-size: 18px; font-weight: 600; margin-bottom: 20px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 500; }
+  .form-group input {
+    width: 100%; padding: 10px 14px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font-size: 14px; font-family: inherit; outline: none;
+    transition: border-color 0.2s ease;
+  }
+  .form-group input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  .form-group input::placeholder { color: var(--muted); }
+  .form-hint { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+  .no-rows td { text-align: center; color: var(--muted); font-style: italic; padding: 32px !important; }
+
+  .form-group select {
+    width: 100%; padding: 10px 14px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font-size: 14px; font-family: inherit; outline: none;
+    transition: border-color 0.2s ease; cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b92ab' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center;
+    padding-right: 36px;
+  }
+  .form-group select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  .form-group select option { background: var(--surface-2); }
+
+  .manage-link {
+    font-size: 12px; color: var(--accent); cursor: pointer; text-decoration: none;
+    display: inline-block; margin-top: 4px;
+  }
+  .manage-link:hover { text-decoration: underline; }
+
+  .num-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; min-height: 32px; }
+  .num-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; font-size: 13px;
+  }
+  .num-item-info { display: flex; flex-direction: column; gap: 1px; }
+  .num-item-label { font-weight: 500; color: var(--text); font-size: 12px; }
+  .num-item-number { color: var(--muted); font-size: 11px; font-family: monospace; }
+  .num-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px; transition: color 0.15s; }
+  .num-del:hover { color: var(--red); }
+
+  .add-row { display: flex; gap: 8px; align-items: flex-end; }
+  .add-row .form-group { margin-bottom: 0; flex: 1; }
+  .add-row .form-group input { padding: 8px 12px; font-size: 13px; }
+  .btn.sm { padding: 8px 14px; font-size: 12px; border-radius: 8px; flex-shrink: 0; }
+
+  .manage-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); font-weight: 600; margin-bottom: 8px; margin-top: 16px; }
+  .manage-section-title:first-child { margin-top: 0; }
+
+  .modal-screen { display: none; }
+  .modal-screen.active { display: block; }
+
+  .divider-line {
+    text-align: center; color: var(--muted); font-size: 11px; margin: 6px 0;
+    position: relative; padding: 4px 0;
+  }
+  .divider-line::before, .divider-line::after {
+    content: ''; position: absolute; top: 50%; width: 25%; height: 1px; background: var(--border);
+  }
+  .divider-line::before { left: 5%; }
+  .divider-line::after { right: 5%; }
+
+  @media (max-width: 900px) {
+    .main { grid-template-columns: 1fr; height: auto; }
+    #lead-panel { grid-template-columns: 1fr; }
+    header { padding: 14px 16px; }
+    .main, .history-section { padding-left: 16px; padding-right: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-group">
+    <div class="logo-icon">🏠</div>
+    <h1>AI Calling Agent<span>Elite Realty</span></h1>
+  </div>
+  <div class="header-right">
+    <div class="status-pill">
+      <span class="status-dot disconnected" id="dot"></span>
+      <span id="conn-label">Connecting…</span>
+    </div>
+    <button class="btn" onclick="openModal()">+ New Call</button>
+  </div>
+</header>
+
+<div class="main">
+  <div class="card" id="transcript-card">
+    <div class="card-header">
+      <span class="card-title">Live Transcript</span>
+      <span class="badge idle" id="call-badge">Idle</span>
+    </div>
+    <div id="transcript-box">
+      <div class="empty-transcript" id="empty-msg">
+        <div class="empty-icon">📞</div>
+        <span>Waiting for a call to start…</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Lead Intelligence</span>
+    </div>
+    <div id="lead-panel">
+      <div class="lead-row full-width">
+        <div class="lead-key">Name</div>
+        <div class="lead-val empty" id="l-name">—</div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-key">Budget (INR)</div>
+        <div class="lead-val empty" id="l-budget">—</div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-key">BHK</div>
+        <div class="lead-val empty" id="l-bhk">—</div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-key">Locations</div>
+        <div class="lead-val empty" id="l-locations">—</div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-key">Timeline</div>
+        <div class="lead-val empty" id="l-timeline">—</div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-key">Purpose</div>
+        <div class="lead-val empty" id="l-purpose">—</div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-key">Interested</div>
+        <div class="lead-val empty" id="l-interested">—</div>
+      </div>
+      <div class="lead-row full-width">
+        <div class="lead-key">Lead Score</div>
+        <div class="lead-val empty" id="l-score">—</div>
+        <div class="score-container"><div class="score-bar"><div class="score-fill" id="l-score-bar"></div></div></div>
+      </div>
+      <div class="lead-row full-width">
+        <div class="lead-key">Summary</div>
+        <div class="lead-val empty" id="l-summary">—</div>
+      </div>
+      <div class="lead-row full-width">
+        <div class="lead-key">Next Action</div>
+        <div class="lead-val empty" id="l-next">—</div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-key">Duration</div>
+        <div class="lead-val empty" id="l-duration">—</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="history-section">
+  <div class="section-title">Call History</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time</th><th>Direction</th><th>Duration</th><th>Score</th><th>Status</th></tr></thead>
+      <tbody id="history-body"><tr class="no-rows"><td colspan="5">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+
+    <!-- Screen 1: Make Call -->
+    <div class="modal-screen active" id="screen-call">
+      <h2>📞 Make an Outbound Call</h2>
+      <div class="form-group">
+        <label>From (Twilio Number)</label>
+        <select id="from-select"></select>
+      </div>
+      <div class="form-group">
+        <label>To (Target Number)</label>
+        <select id="to-select"></select>
+      </div>
+      <div class="form-group">
+        <label>Server URL</label>
+        <input type="url" id="base-url-input" placeholder="https://xxxx.ngrok-free.dev">
+        <div class="form-hint">Auto-detected — change only if incorrect</div>
+      </div>
+      <div id="call-error" style="color:var(--red);font-size:13px;display:none;margin-bottom:8px;padding:8px 12px;background:rgba(248,113,113,0.08);border-radius:8px;"></div>
+      <div class="modal-actions" style="justify-content:space-between;align-items:center;">
+        <span class="manage-link" onclick="showScreen('manage')">Manage numbers →</span>
+        <div style="display:flex;gap:10px;">
+          <button class="btn secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn" onclick="makeCall()">Start Call</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Screen 2: Manage Numbers -->
+    <div class="modal-screen" id="screen-manage">
+      <h2>Manage Numbers</h2>
+
+      <div class="manage-section-title">Twilio Numbers (From)</div>
+      <div class="num-list" id="twilio-list"></div>
+      <div class="add-row">
+        <div class="form-group"><label>Label</label><input type="text" id="twilio-label" placeholder="e.g. Trial"></div>
+        <div class="form-group"><label>Number</label><input type="tel" id="twilio-number" placeholder="+17372212163"></div>
+        <button class="btn sm" onclick="addNumber('twilio')">Add</button>
+      </div>
+
+      <div class="manage-section-title" style="margin-top:20px;">Target Numbers (To)</div>
+      <div class="num-list" id="target-list"></div>
+      <div class="add-row">
+        <div class="form-group"><label>Label</label><input type="text" id="target-label" placeholder="e.g. Client 1"></div>
+        <div class="form-group"><label>Number</label><input type="tel" id="target-number" placeholder="+917525027889"></div>
+        <button class="btn sm" onclick="addNumber('target')">Add</button>
+      </div>
+
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="btn secondary" onclick="showScreen('call')">← Back</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const dot = document.getElementById('dot');
+  const connLabel = document.getElementById('conn-label');
+  const callBadge = document.getElementById('call-badge');
+  const transcriptBox = document.getElementById('transcript-box');
+  const transcriptCard = document.getElementById('transcript-card');
+  const emptyMsg = document.getElementById('empty-msg');
+  let ws = null, reconnectTimer = null;
+
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}/ws/dashboard`);
+    ws.onopen = () => { dot.className = 'status-dot connected'; connLabel.textContent = 'Live'; clearTimeout(reconnectTimer); };
+    ws.onclose = () => { dot.className = 'status-dot disconnected'; connLabel.textContent = 'Reconnecting…'; reconnectTimer = setTimeout(connect, 3000); };
+    ws.onerror = () => ws.close();
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'call_started') handleCallStarted(msg);
+      else if (msg.type === 'transcript') handleTranscript(msg);
+      else if (msg.type === 'call_ended') handleCallEnded(msg);
+    };
+  }
+
+  function handleCallStarted(msg) {
+    callBadge.textContent = 'Active'; callBadge.className = 'badge active';
+    transcriptCard.classList.add('active-call');
+    if (emptyMsg) emptyMsg.remove();
+    resetLead();
+    const d = document.createElement('div'); d.className = 'divider-line';
+    d.textContent = `Call started ${formatTime(msg.timestamp)}`;
+    transcriptBox.appendChild(d); transcriptBox.scrollTop = transcriptBox.scrollHeight;
+  }
+
+  function handleTranscript(msg) {
+    const wrap = document.createElement('div'); wrap.className = `turn ${msg.speaker}`;
+    const avatar = document.createElement('div'); avatar.className = 'turn-avatar';
+    avatar.textContent = msg.speaker === 'agent' ? '🤖' : '👤';
+    const content = document.createElement('div'); content.className = 'turn-content';
+    const label = document.createElement('div'); label.className = 'turn-label';
+    label.textContent = msg.speaker === 'agent' ? 'Agent' : 'Caller';
+    const bubble = document.createElement('div'); bubble.className = 'turn-bubble';
+    bubble.textContent = msg.text;
+    content.appendChild(label); content.appendChild(bubble);
+    wrap.appendChild(avatar); wrap.appendChild(content);
+    transcriptBox.appendChild(wrap); transcriptBox.scrollTop = transcriptBox.scrollHeight;
+  }
+
+  function handleCallEnded(msg) {
+    callBadge.textContent = 'Idle'; callBadge.className = 'badge idle';
+    transcriptCard.classList.remove('active-call');
+    const d = document.createElement('div'); d.className = 'divider-line';
+    d.textContent = `Call ended · ${msg.duration}s`;
+    transcriptBox.appendChild(d); transcriptBox.scrollTop = transcriptBox.scrollHeight;
+    if (msg.lead) fillLead(msg.lead, msg.duration);
+    loadHistory();
+  }
+
+  function resetLead() {
+    ['l-name','l-budget','l-locations','l-bhk','l-timeline','l-purpose','l-interested','l-score','l-summary','l-next','l-duration'].forEach(id => {
+      const el = document.getElementById(id); el.textContent = '—'; el.className = 'lead-val empty'; el.style.color = '';
+    });
+    document.getElementById('l-score-bar').style.width = '0%';
+  }
+
+  function fillLead(lead, duration) {
+    function set(id, val) { const el = document.getElementById(id); if (val && val !== 'unknown') { el.textContent = val; el.className = 'lead-val'; } }
+    set('l-name', lead.name);
+    const bMin = lead.budget_min ? '₹' + fmtINR(lead.budget_min) : null;
+    const bMax = lead.budget_max ? '₹' + fmtINR(lead.budget_max) : null;
+    if (bMin && bMax) set('l-budget', `${bMin} – ${bMax}`); else if (bMin || bMax) set('l-budget', bMin || bMax);
+    if (lead.locations && lead.locations.length) set('l-locations', lead.locations.join(', '));
+    if (lead.bhk) set('l-bhk', lead.bhk + ' BHK');
+    set('l-timeline', lead.timeline); set('l-purpose', lead.purpose);
+    if (lead.interested !== undefined) {
+      const el = document.getElementById('l-interested');
+      el.textContent = lead.interested ? '✓ Yes' : '✗ No';
+      el.className = 'lead-val'; el.style.color = lead.interested ? 'var(--green)' : 'var(--red)';
+    }
+    if (lead.lead_score !== undefined) {
+      document.getElementById('l-score').textContent = lead.lead_score + ' / 100';
+      document.getElementById('l-score').className = 'lead-val';
+      document.getElementById('l-score-bar').style.width = lead.lead_score + '%';
+    }
+    set('l-summary', lead.call_summary); set('l-next', lead.next_action);
+    if (duration) { const el = document.getElementById('l-duration'); el.textContent = formatDuration(duration); el.className = 'lead-val'; }
+  }
+
+  function fmtINR(n) { if (n >= 10000000) return (n/10000000).toFixed(1)+' Cr'; if (n >= 100000) return (n/100000).toFixed(1)+' L'; return n.toLocaleString('en-IN'); }
+  function formatTime(iso) { return iso ? new Date(iso).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : ''; }
+  function formatDuration(s) { return s < 60 ? s+'s' : Math.floor(s/60)+'m '+(s%60)+'s'; }
+
+  async function loadHistory() {
+    const tbody = document.getElementById('history-body');
+    try {
+      const res = await fetch('/api/calls'); const calls = await res.json();
+      if (!calls || !calls.length) { tbody.innerHTML = '<tr class="no-rows"><td colspan="5">No calls yet</td></tr>'; return; }
+      tbody.innerHTML = calls.map(c => {
+        const t = c.started_at ? new Date(c.started_at).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
+        return `<tr><td>${t}</td><td style="text-transform:capitalize">${c.direction||'—'}</td><td>${c.duration_seconds?formatDuration(c.duration_seconds):'—'}</td><td>${c.lead_score!=null?c.lead_score+'/100':'—'}</td><td><span class="chip ${c.status||'unknown'}">${c.status||'unknown'}</span></td></tr>`;
+      }).join('');
+    } catch(e) { tbody.innerHTML = '<tr class="no-rows"><td colspan="5">Error loading</td></tr>'; }
+  }
+
+  // ── Number management (localStorage) ──────────────────────────────────────
+  const DEFAULTS = {
+    twilio: [
+      { label: 'Main',  number: '+17372212163' },
+      { label: 'Trial', number: '+17372508034' },
+    ],
+    target: [
+      { label: 'Client 1', number: '+917525027889' },
+      { label: 'Client 2', number: '+919131405229' },
+    ],
+  };
+
+  function loadNums(key) {
+    try { return JSON.parse(localStorage.getItem(key)) || null; } catch { return null; }
+  }
+  function saveNums(key, arr) { localStorage.setItem(key, JSON.stringify(arr)); }
+
+  function getNums(key) {
+    return loadNums(key) || DEFAULTS[key];
+  }
+
+  function populateSelect(selectId, key) {
+    const sel = document.getElementById(selectId);
+    const nums = getNums(key);
+    sel.innerHTML = nums.map(n => `<option value="${n.number}">${n.label} — ${n.number}</option>`).join('');
+  }
+
+  function renderList(listId, key) {
+    const nums = getNums(key);
+    document.getElementById(listId).innerHTML = nums.length
+      ? nums.map((n, i) => `
+          <div class="num-item">
+            <div class="num-item-info">
+              <span class="num-item-label">${n.label}</span>
+              <span class="num-item-number">${n.number}</span>
+            </div>
+            <button class="num-del" onclick="deleteNum('${key}',${i})">✕</button>
+          </div>`).join('')
+      : '<div style="color:var(--muted);font-size:12px;padding:4px 0">No numbers saved</div>';
+  }
+
+  function deleteNum(key, idx) {
+    const nums = getNums(key);
+    nums.splice(idx, 1);
+    saveNums(key, nums);
+    renderList(key === 'twilio' ? 'twilio-list' : 'target-list', key);
+    populateSelect(key === 'twilio' ? 'from-select' : 'to-select', key);
+  }
+
+  function addNumber(key) {
+    const labelEl = document.getElementById(`${key}-label`);
+    const numEl   = document.getElementById(`${key}-number`);
+    const label   = labelEl.value.trim();
+    const number  = numEl.value.trim();
+    if (!label || !number.match(/^\+\d{8,15}$/)) {
+      alert('Enter a label and a valid number (e.g. +917525027889)'); return;
+    }
+    const nums = getNums(key);
+    nums.push({ label, number });
+    saveNums(key, nums);
+    labelEl.value = ''; numEl.value = '';
+    renderList(key === 'twilio' ? 'twilio-list' : 'target-list', key);
+    populateSelect(key === 'twilio' ? 'from-select' : 'to-select', key);
+  }
+
+  function showScreen(name) {
+    document.getElementById('screen-call').classList.toggle('active', name === 'call');
+    document.getElementById('screen-manage').classList.toggle('active', name === 'manage');
+    if (name === 'manage') { renderList('twilio-list', 'twilio'); renderList('target-list', 'target'); }
+    if (name === 'call')   { populateSelect('from-select', 'twilio'); populateSelect('to-select', 'target'); }
+  }
+
+  function openModal() {
+    document.getElementById('modal').classList.add('open');
+    document.getElementById('call-error').style.display = 'none';
+    showScreen('call');
+    const u = document.getElementById('base-url-input');
+    if (!u.value) u.value = window.location.origin;
+  }
+  function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+  async function makeCall() {
+    const fromNumber = document.getElementById('from-select').value;
+    const toNumber   = document.getElementById('to-select').value;
+    const baseUrl    = document.getElementById('base-url-input').value.trim().replace(/\/$/,'');
+    const errEl      = document.getElementById('call-error');
+    if (!fromNumber) { errEl.textContent='Select a Twilio number'; errEl.style.display='block'; return; }
+    if (!toNumber)   { errEl.textContent='Select a target number';  errEl.style.display='block'; return; }
+    if (!baseUrl.startsWith('http')) { errEl.textContent='URL must start with http:// or https://'; errEl.style.display='block'; return; }
+    errEl.style.display = 'none';
+    const btn = document.querySelector('#screen-call .btn:not(.secondary)');
+    btn.textContent = 'Calling…'; btn.disabled = true;
+    try {
+      const res = await fetch('/outbound-call', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone_number: toNumber, from_number: fromNumber, base_url: baseUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error ' + res.status);
+      closeModal();
+    } catch(e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
+    finally { btn.textContent = 'Start Call'; btn.disabled = false; }
+  }
+
+  document.getElementById('modal').addEventListener('click', e => { if (e.target === document.getElementById('modal')) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+  connect(); loadHistory();
+</script>
+</body>
+</html>

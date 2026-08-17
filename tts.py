@@ -16,17 +16,22 @@ class EdgeTTS:
         return await asyncio.to_thread(self._synthesize_sync, text)
 
     def _synthesize_sync(self, text: str) -> bytes:
+        import time
+        t0 = time.monotonic()
         # Step 1: gTTS -> MP3 bytes
         mp3_buffer = io.BytesIO()
         gTTS(text, lang="en", tld="co.in").write_to_fp(mp3_buffer)
         mp3_buffer.seek(0)
+        print(f"[tts] gTTS fetch took {time.monotonic()-t0:.2f}s")
 
         # Step 2: MP3 -> PCM 8kHz mono 16-bit (Twilio requirement)
         audio = AudioSegment.from_mp3(mp3_buffer)
         audio = audio.set_frame_rate(8000).set_channels(1).set_sample_width(2)
 
         # Step 3: PCM -> mulaw (Twilio media stream format)
-        return audioop.lin2ulaw(audio.raw_data, 2)
+        result = audioop.lin2ulaw(audio.raw_data, 2)
+        print(f"[tts] Total synthesis took {time.monotonic()-t0:.2f}s, {len(result)} bytes")
+        return result
 
     async def stream_synthesis(self, text_stream):
         buffer = ""
