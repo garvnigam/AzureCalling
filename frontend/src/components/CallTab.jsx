@@ -19,20 +19,20 @@ const DEFAULT_NUMS = {
   target: [{ label: 'Client 1', number: '+917525027889' }, { label: 'Client 2', number: '+919131405229' }],
 }
 
-const Input = ({ label, ...props }) => (
+const Input = React.forwardRef(({ label, ...props }, ref) => (
   <div>
     <label className="block text-xs text-gray-400 mb-1.5">{label}</label>
-    <input {...props} className="w-full px-3.5 py-2.5 rounded-lg bg-surface-2 border border-border focus:border-accent outline-none text-sm" />
+    <input ref={ref} {...props} className="w-full px-3.5 py-2.5 rounded-lg bg-surface-2 border border-border focus:border-accent outline-none text-sm" />
   </div>
-)
-const Select = ({ label, children, ...props }) => (
+))
+const Select = React.forwardRef(({ label, children, ...props }, ref) => (
   <div>
     <label className="block text-xs text-gray-400 mb-1.5">{label}</label>
-    <select {...props} className="w-full px-3 py-2.5 rounded-lg bg-surface-2 border border-border focus:border-accent outline-none text-sm">
+    <select ref={ref} {...props} className="w-full px-3 py-2.5 rounded-lg bg-surface-2 border border-border focus:border-accent outline-none text-sm">
       {children}
     </select>
   </div>
-)
+))
 
 /* ── Lead card ─────────────────────────────────────────────────────────── */
 
@@ -192,6 +192,12 @@ export default function CallTab() {
 
   // base URL for outbound call
   const [baseUrl, setBaseUrl] = useState(window.location.origin)
+  const fromRef = useRef(null)
+  const toRef = useRef(null)
+  const baseRef = useRef(null)
+
+  const twilioNums = numbers?.twilio?.length ? numbers.twilio : DEFAULT_NUMS.twilio
+  const targetNums = numbers?.target?.length ? numbers.target : DEFAULT_NUMS.target
 
   const loadHistory = useCallback(async () => {
     try { setCalls(await api('/api/calls')) } catch (e) { console.warn('history load failed', e) }
@@ -278,19 +284,18 @@ export default function CallTab() {
       {/* Make call modal */}
       <Modal open={showCall} onClose={() => setShowCall(false)} title="📞 Make an Outbound Call">
         <div className="space-y-4">
-          <Select label="From (Twilio Number)" value={undefined} onChange={() => {}}>
-            {(numbers?.twilio?.length ? numbers.twilio : DEFAULT_NUMS.twilio).map((n, i) => (
+          <Select ref={fromRef} label="From (Twilio Number)" defaultValue={twilioNums[0]?.number}>
+            {twilioNums.map((n, i) => (
               <option key={i} value={n.number}>{n.label} — {n.number}</option>
             ))}
           </Select>
-          <Select label="To (Target Number)" value={undefined} onChange={() => {}}>
-            {(numbers?.target?.length ? numbers.target : DEFAULT_NUMS.target).map((n, i) => (
+          <Select ref={toRef} label="To (Target Number)" defaultValue={targetNums[0]?.number}>
+            {targetNums.map((n, i) => (
               <option key={i} value={n.number}>{n.label} — {n.number}</option>
             ))}
           </Select>
-          <Input label="Server URL" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
-          <MakeCallButton from={(numbers?.twilio || DEFAULT_NUMS.twilio)[0]?.number}
-            to={(numbers?.target || DEFAULT_NUMS.target)[0]?.number} baseUrl={baseUrl}
+          <Input ref={baseRef} label="Server URL" defaultValue={baseUrl} />
+          <MakeCallButton fromRef={fromRef} toRef={toRef} baseRef={baseRef}
             defaultUserId={defaultUserId} users={users} />
         </div>
       </Modal>
@@ -316,13 +321,10 @@ export default function CallTab() {
 
 /* ── Make call action ──────────────────────────────────────────────────── */
 
-function MakeCallButton({ from, to, baseUrl, defaultUserId, users }) {
+function MakeCallButton({ fromRef, toRef, baseRef, defaultUserId, users }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [ok, setOk] = useState('')
-  const fromSel = useRef(null)
-  const toSel = useRef(null)
-  const baseSel = useRef(null)
   const userSel = useRef(null)
 
   async function call() {
@@ -331,9 +333,9 @@ function MakeCallButton({ from, to, baseUrl, defaultUserId, users }) {
       const data = await api('/outbound-call', {
         method: 'POST',
         body: {
-          phone_number: toSel.current?.value || to,
-          from_number: fromSel.current?.value || from,
-          base_url: baseSel.current?.value || baseUrl,
+          phone_number: toRef.current?.value,
+          from_number: fromRef.current?.value,
+          base_url: baseRef.current?.value,
           user_id: userSel.current?.value || defaultUserId,
         },
       })
@@ -353,15 +355,6 @@ function MakeCallButton({ from, to, baseUrl, defaultUserId, users }) {
           ))}
         </select>
         <p className="text-[11px] text-gray-600 mt-1.5">Falls back to the default set in ⚙ Settings if unset.</p>
-      </div>
-      <div className="flex items-center gap-3 mt-4">
-        <select ref={fromSel} className="flex-1 px-3 py-2 rounded-lg bg-surface-2 border border-border text-sm outline-none" defaultValue={from}>
-          <option value={from}>{from}</option>
-        </select>
-        <select ref={toSel} className="flex-1 px-3 py-2 rounded-lg bg-surface-2 border border-border text-sm outline-none" defaultValue={to}>
-          <option value={to}>{to}</option>
-        </select>
-        <input ref={baseSel} defaultValue={baseUrl} className="flex-1 px-3 py-2 rounded-lg bg-surface-2 border border-border text-sm outline-none" />
       </div>
       {err && <p className="text-sm text-red mt-2">{err}</p>}
       {ok && <p className="text-sm text-green mt-2">{ok}</p>}

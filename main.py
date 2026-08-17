@@ -122,11 +122,13 @@ async def me(user: dict = Depends(get_current_user)):
 async def dashboard_ws(websocket: WebSocket, token: str = ""):
     from services.auth_service import verify_token
     if not token:
+        log.warning("WS rejected: no token in URL (stale page/dashboard.html or logged-out tab)")
         await websocket.close(code=4401)
         return
     try:
         verify_token(token)
-    except Exception:
+    except Exception as e:
+        log.warning("WS rejected: invalid/expired token (%s)", str(e)[:60])
         await websocket.close(code=4401)
         return
     await manager.connect(websocket)
@@ -294,10 +296,9 @@ async def call_status(request: Request):
                 phone = extracted.get("phone")
                 if phone:
                     try:
-                        sid = await send_followup_whatsapp(full_transcript, extracted, phone)
-                        log.info("follow-up sent to %s (sid=%s)", phone, sid)
+                        await send_followup_whatsapp(phone, full_transcript, extracted)
                     except Exception as e:
-                        log.warning("auto follow-up failed: %s", e)
+                        log.warning("auto whatsapp skipped: %s", e)
                 else:
                     log.info("no lead phone extracted — skipping auto follow-up")
     return Response(content="", status_code=204)
@@ -398,7 +399,7 @@ async def api_set_settings(request: Request, user: dict = Depends(get_current_us
 
 
 @app.post("/outbound-call")
-async def make_outbound_call(request: Request, user: dict = Depends(get_current_user)):
+async def start_outbound_call(request: Request, user: dict = Depends(get_current_user)):
     from fastapi import HTTPException
     body = await request.json()
     phone = body.get("phone_number")
