@@ -233,6 +233,36 @@ async def call_status(request: Request):
     return Response(content="", status_code=204)
 
 
+@app.get("/api/numbers")
+async def get_numbers():
+    try:
+        twilio = await db.get_phone_numbers("twilio")
+        target = await db.get_phone_numbers("target")
+        return {"twilio": twilio, "target": target}
+    except Exception as e:
+        print(f"get_numbers error: {e}")
+        return {"twilio": [], "target": []}
+
+
+@app.post("/api/numbers")
+async def add_number(request: Request):
+    body = await request.json()
+    type_ = body.get("type")
+    label = body.get("label", "").strip()
+    number = body.get("number", "").strip()
+    if type_ not in ("twilio", "target") or not label or not number:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="type, label, and number are required")
+    id = await db.add_phone_number(type_, label, number)
+    return {"id": id, "type": type_, "label": label, "number": number}
+
+
+@app.delete("/api/numbers/{num_id}")
+async def delete_number(num_id: str):
+    await db.delete_phone_number(num_id)
+    return {"status": "deleted"}
+
+
 @app.post("/outbound-call")
 async def make_outbound_call(request: Request):
     from twilio.rest import Client
@@ -246,10 +276,11 @@ async def make_outbound_call(request: Request):
         os.getenv("TWILIO_ACCOUNT_SID"),
         os.getenv("TWILIO_AUTH_TOKEN"),
     )
+    from_number = body.get("from_number") or os.getenv("TWILIO_PHONE_NUMBER")
     try:
         call = client.calls.create(
             to=phone,
-            from_=os.getenv("TWILIO_PHONE_NUMBER"),
+            from_=from_number,
             url=f"{base_url}/incoming-call",
             status_callback=f"{base_url}/call-status",
             status_callback_event=["completed"],

@@ -44,6 +44,20 @@ class Database:
             "lead_score": extracted_data.get("lead_score", 0),
             "duration_seconds": duration,
             "ended_at": datetime.utcnow().isoformat(),
+            # individual lead columns
+            "lead_name": extracted_data.get("name"),
+            "lead_phone": extracted_data.get("phone"),
+            "lead_email": extracted_data.get("email"),
+            "budget_min": extracted_data.get("budget_min"),
+            "budget_max": extracted_data.get("budget_max"),
+            "locations": extracted_data.get("locations") or [],
+            "bhk": extracted_data.get("bhk"),
+            "property_type": extracted_data.get("property_type"),
+            "timeline": extracted_data.get("timeline"),
+            "purpose": extracted_data.get("purpose"),
+            "interested": extracted_data.get("interested", True),
+            "call_summary": extracted_data.get("call_summary"),
+            "next_action": extracted_data.get("next_action"),
         }).eq("id", call_id).execute()
 
     async def get_agent(self, agent_id: str):
@@ -56,3 +70,18 @@ class Database:
             "user_id", user_id).order(
             "created_at", desc=True).limit(limit).execute()
         return result.data
+
+    async def get_phone_numbers(self, type: str):
+        result = self.client.table("phone_numbers").select("*").eq(
+            "type", type).order("created_at").execute()
+        return result.data or []
+
+    async def add_phone_number(self, type: str, label: str, number: str) -> str:
+        id = str(uuid.uuid4())
+        self.client.table("phone_numbers").insert({
+            "id": id, "type": type, "label": label, "number": number,
+        }).execute()
+        return id
+
+    async def delete_phone_number(self, id: str):
+        self.client.table("phone_numbers").delete().eq("id", id).execute()

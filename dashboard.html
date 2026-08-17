@@ -283,6 +283,47 @@
   .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
   .no-rows td { text-align: center; color: var(--muted); font-style: italic; padding: 32px !important; }
 
+  .form-group select {
+    width: 100%; padding: 10px 14px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font-size: 14px; font-family: inherit; outline: none;
+    transition: border-color 0.2s ease; cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b92ab' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center;
+    padding-right: 36px;
+  }
+  .form-group select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  .form-group select option { background: var(--surface-2); }
+
+  .manage-link {
+    font-size: 12px; color: var(--accent); cursor: pointer; text-decoration: none;
+    display: inline-block; margin-top: 4px;
+  }
+  .manage-link:hover { text-decoration: underline; }
+
+  .num-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; min-height: 32px; }
+  .num-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; font-size: 13px;
+  }
+  .num-item-info { display: flex; flex-direction: column; gap: 1px; }
+  .num-item-label { font-weight: 500; color: var(--text); font-size: 12px; }
+  .num-item-number { color: var(--muted); font-size: 11px; font-family: monospace; }
+  .num-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px; transition: color 0.15s; }
+  .num-del:hover { color: var(--red); }
+
+  .add-row { display: flex; gap: 8px; align-items: flex-end; }
+  .add-row .form-group { margin-bottom: 0; flex: 1; }
+  .add-row .form-group input { padding: 8px 12px; font-size: 13px; }
+  .btn.sm { padding: 8px 14px; font-size: 12px; border-radius: 8px; flex-shrink: 0; }
+
+  .manage-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); font-weight: 600; margin-bottom: 8px; margin-top: 16px; }
+  .manage-section-title:first-child { margin-top: 0; }
+
+  .modal-screen { display: none; }
+  .modal-screen.active { display: block; }
+
   .divider-line {
     text-align: center; color: var(--muted); font-size: 11px; margin: 6px 0;
     position: relative; padding: 4px 0;
@@ -397,22 +438,58 @@
 
 <div class="modal-overlay" id="modal">
   <div class="modal">
-    <h2>📞 Make an Outbound Call</h2>
-    <div class="form-group">
-      <label>Phone Number</label>
-      <input type="tel" id="phone-input" placeholder="+917525027889">
-      <div class="form-hint">E.164 format with country code</div>
+
+    <!-- Screen 1: Make Call -->
+    <div class="modal-screen active" id="screen-call">
+      <h2>📞 Make an Outbound Call</h2>
+      <div class="form-group">
+        <label>From (Twilio Number)</label>
+        <select id="from-select"></select>
+      </div>
+      <div class="form-group">
+        <label>To (Target Number)</label>
+        <select id="to-select"></select>
+      </div>
+      <div class="form-group">
+        <label>Server URL</label>
+        <input type="url" id="base-url-input" placeholder="https://xxxx.ngrok-free.dev">
+        <div class="form-hint">Auto-detected — change only if incorrect</div>
+      </div>
+      <div id="call-error" style="color:var(--red);font-size:13px;display:none;margin-bottom:8px;padding:8px 12px;background:rgba(248,113,113,0.08);border-radius:8px;"></div>
+      <div class="modal-actions" style="justify-content:space-between;align-items:center;">
+        <span class="manage-link" onclick="showScreen('manage')">Manage numbers →</span>
+        <div style="display:flex;gap:10px;">
+          <button class="btn secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn" onclick="makeCall()">Start Call</button>
+        </div>
+      </div>
     </div>
-    <div class="form-group">
-      <label>Server URL</label>
-      <input type="url" id="base-url-input" placeholder="https://xxxx.ngrok-free.dev">
-      <div class="form-hint">Auto-detected — change only if incorrect</div>
+
+    <!-- Screen 2: Manage Numbers -->
+    <div class="modal-screen" id="screen-manage">
+      <h2>Manage Numbers</h2>
+
+      <div class="manage-section-title">Twilio Numbers (From)</div>
+      <div class="num-list" id="twilio-list"></div>
+      <div class="add-row">
+        <div class="form-group"><label>Label</label><input type="text" id="twilio-label" placeholder="e.g. Trial"></div>
+        <div class="form-group"><label>Number</label><input type="tel" id="twilio-number" placeholder="+17372212163"></div>
+        <button class="btn sm" onclick="addNumber('twilio')">Add</button>
+      </div>
+
+      <div class="manage-section-title" style="margin-top:20px;">Target Numbers (To)</div>
+      <div class="num-list" id="target-list"></div>
+      <div class="add-row">
+        <div class="form-group"><label>Label</label><input type="text" id="target-label" placeholder="e.g. Client 1"></div>
+        <div class="form-group"><label>Number</label><input type="tel" id="target-number" placeholder="+917525027889"></div>
+        <button class="btn sm" onclick="addNumber('target')">Add</button>
+      </div>
+
+      <div class="modal-actions" style="margin-top:20px;">
+        <button class="btn secondary" onclick="showScreen('call')">← Back</button>
+      </div>
     </div>
-    <div id="call-error" style="color:var(--red);font-size:13px;display:none;margin-bottom:8px;padding:8px 12px;background:rgba(248,113,113,0.08);border-radius:8px;"></div>
-    <div class="modal-actions">
-      <button class="btn secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn" onclick="makeCall()">Start Call</button>
-    </div>
+
   </div>
 </div>
 
@@ -519,27 +596,112 @@
     } catch(e) { tbody.innerHTML = '<tr class="no-rows"><td colspan="5">Error loading</td></tr>'; }
   }
 
-  function openModal() { document.getElementById('modal').classList.add('open'); document.getElementById('call-error').style.display='none'; const u=document.getElementById('base-url-input'); if(!u.value) u.value=window.location.origin; }
+  // ── Number management (localStorage) ──────────────────────────────────────
+  const DEFAULTS = {
+    twilio: [
+      { label: 'Main',  number: '+17372212163' },
+      { label: 'Trial', number: '+17372508034' },
+    ],
+    target: [
+      { label: 'Client 1', number: '+917525027889' },
+      { label: 'Client 2', number: '+919131405229' },
+    ],
+  };
+
+  function loadNums(key) {
+    try { return JSON.parse(localStorage.getItem(key)) || null; } catch { return null; }
+  }
+  function saveNums(key, arr) { localStorage.setItem(key, JSON.stringify(arr)); }
+
+  function getNums(key) {
+    return loadNums(key) || DEFAULTS[key];
+  }
+
+  function populateSelect(selectId, key) {
+    const sel = document.getElementById(selectId);
+    const nums = getNums(key);
+    sel.innerHTML = nums.map(n => `<option value="${n.number}">${n.label} — ${n.number}</option>`).join('');
+  }
+
+  function renderList(listId, key) {
+    const nums = getNums(key);
+    document.getElementById(listId).innerHTML = nums.length
+      ? nums.map((n, i) => `
+          <div class="num-item">
+            <div class="num-item-info">
+              <span class="num-item-label">${n.label}</span>
+              <span class="num-item-number">${n.number}</span>
+            </div>
+            <button class="num-del" onclick="deleteNum('${key}',${i})">✕</button>
+          </div>`).join('')
+      : '<div style="color:var(--muted);font-size:12px;padding:4px 0">No numbers saved</div>';
+  }
+
+  function deleteNum(key, idx) {
+    const nums = getNums(key);
+    nums.splice(idx, 1);
+    saveNums(key, nums);
+    renderList(key === 'twilio' ? 'twilio-list' : 'target-list', key);
+    populateSelect(key === 'twilio' ? 'from-select' : 'to-select', key);
+  }
+
+  function addNumber(key) {
+    const labelEl = document.getElementById(`${key}-label`);
+    const numEl   = document.getElementById(`${key}-number`);
+    const label   = labelEl.value.trim();
+    const number  = numEl.value.trim();
+    if (!label || !number.match(/^\+\d{8,15}$/)) {
+      alert('Enter a label and a valid number (e.g. +917525027889)'); return;
+    }
+    const nums = getNums(key);
+    nums.push({ label, number });
+    saveNums(key, nums);
+    labelEl.value = ''; numEl.value = '';
+    renderList(key === 'twilio' ? 'twilio-list' : 'target-list', key);
+    populateSelect(key === 'twilio' ? 'from-select' : 'to-select', key);
+  }
+
+  function showScreen(name) {
+    document.getElementById('screen-call').classList.toggle('active', name === 'call');
+    document.getElementById('screen-manage').classList.toggle('active', name === 'manage');
+    if (name === 'manage') { renderList('twilio-list', 'twilio'); renderList('target-list', 'target'); }
+    if (name === 'call')   { populateSelect('from-select', 'twilio'); populateSelect('to-select', 'target'); }
+  }
+
+  function openModal() {
+    document.getElementById('modal').classList.add('open');
+    document.getElementById('call-error').style.display = 'none';
+    showScreen('call');
+    const u = document.getElementById('base-url-input');
+    if (!u.value) u.value = window.location.origin;
+  }
   function closeModal() { document.getElementById('modal').classList.remove('open'); }
 
   async function makeCall() {
-    const phone = document.getElementById('phone-input').value.trim();
-    const baseUrl = document.getElementById('base-url-input').value.trim().replace(/\/$/,'');
-    const errEl = document.getElementById('call-error');
-    if (!phone.match(/^\+\d{8,15}$/)) { errEl.textContent='Enter a valid number, e.g. +917525027889'; errEl.style.display='block'; return; }
+    const fromNumber = document.getElementById('from-select').value;
+    const toNumber   = document.getElementById('to-select').value;
+    const baseUrl    = document.getElementById('base-url-input').value.trim().replace(/\/$/,'');
+    const errEl      = document.getElementById('call-error');
+    if (!fromNumber) { errEl.textContent='Select a Twilio number'; errEl.style.display='block'; return; }
+    if (!toNumber)   { errEl.textContent='Select a target number';  errEl.style.display='block'; return; }
     if (!baseUrl.startsWith('http')) { errEl.textContent='URL must start with http:// or https://'; errEl.style.display='block'; return; }
-    errEl.style.display='none';
-    const btn = document.querySelector('#modal .btn:not(.secondary)'); btn.textContent='Calling…'; btn.disabled=true;
+    errEl.style.display = 'none';
+    const btn = document.querySelector('#screen-call .btn:not(.secondary)');
+    btn.textContent = 'Calling…'; btn.disabled = true;
     try {
-      const res = await fetch('/outbound-call',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone_number:phone,base_url:baseUrl})});
-      const data = await res.json(); if(!res.ok) throw new Error(data.detail||'Error '+res.status);
+      const res = await fetch('/outbound-call', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone_number: toNumber, from_number: fromNumber, base_url: baseUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error ' + res.status);
       closeModal();
-    } catch(e) { errEl.textContent=e.message; errEl.style.display='block'; }
-    finally { btn.textContent='Start Call'; btn.disabled=false; }
+    } catch(e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
+    finally { btn.textContent = 'Start Call'; btn.disabled = false; }
   }
 
-  document.getElementById('modal').addEventListener('click', e => { if(e.target===document.getElementById('modal')) closeModal(); });
-  document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
+  document.getElementById('modal').addEventListener('click', e => { if (e.target === document.getElementById('modal')) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
   connect(); loadHistory();
 </script>
 </body>
