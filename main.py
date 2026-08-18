@@ -19,7 +19,7 @@ load_dotenv()
 setup_logging()
 log = get_logger("api")
 
-app = FastAPI(title="AI Calling Agent")
+app = FastAPI(title="Realty Siksha")
 db = Database()
 
 # In-memory conversation state keyed by CallSid
@@ -226,7 +226,7 @@ async def handle_incoming_call(request: Request):
         await manager.broadcast({"type": "call_started", "call_id": call_id,
                                   "timestamp": datetime.now(timezone.utc).isoformat()})
         agent = os.getenv("AGENT_NAME", "Shyam Dhar Dubey")
-        company = os.getenv("COMPANY_NAME", "Elite Realty")
+        company = os.getenv("COMPANY_NAME", "Realty Siksha")
         greeting = (
             f"Hello! I'm {agent} calling from {company}. "
             f"We are a real estate consultancy specializing in properties in Greater Noida. "

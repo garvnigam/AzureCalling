@@ -4,19 +4,26 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: '#0a0b10',
-        surface: '#12141d',
-        'surface-2': '#1a1d2b',
-        border: '#1f2233',
-        accent: '#7c5cfc',
-        'accent-2': '#5b8def',
-        green: '#34d399',
-        red: '#f87171',
+        bg: '#0b1220',
+        surface: '#111a2e',
+        'surface-2': '#17223b',
+        border: '#1e2a45',
+        accent: '#2563eb',
+        'accent-2': '#0ea5e9',
+        green: '#10b981',
+        red: '#ef4444',
       },
-      fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
+      },
       boxShadow: {
-        glow: '0 4px 20px rgba(124, 92, 252, 0.3)',
-        'glow-green': '0 4px 20px rgba(52, 211, 153, 0.25)',
+        glow: '0 8px 24px -8px rgba(37, 99, 235, 0.45)',
+        'glow-green': '0 8px 24px -8px rgba(16, 185, 129, 0.4)',
+        card: '0 1px 0 rgba(255,255,255,0.03) inset, 0 8px 24px -12px rgba(0,0,0,0.6)',
+      },
+      letterSpacing: {
+        tightest: '-0.02em',
       },
     },
   },
