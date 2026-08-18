@@ -5,6 +5,9 @@ from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Gather
 from .logger import get_logger
 
+SILENCE_THRESHOLD = 150   # mulaw RMS energy — below this is silence
+SILENCE_TIMEOUT = 1.5     # seconds of silence after speech to trigger STT
+
 log = get_logger("call")
 
 
@@ -29,6 +32,17 @@ def build_gather_response(text: str, base_url: str) -> Response:
     response.redirect(f"{base_url}/incoming-call", method="POST")
     twiml = str(response)
     log.info("twiml: %s", twiml[:300])
+    return Response(content=twiml, media_type="application/xml")
+
+
+def build_stream_response(call_sid: str, base_url: str) -> Response:
+    """Connect the call to a Media Streams WebSocket for real-time audio."""
+    ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://")
+    response = VoiceResponse()
+    connect = response.connect()
+    connect.stream(url=f"{ws_url}/media-stream/{call_sid}")
+    twiml = str(response)
+    log.info("stream twiml for %s: %s", call_sid, twiml[:200])
     return Response(content=twiml, media_type="application/xml")
 
 

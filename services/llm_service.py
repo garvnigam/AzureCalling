@@ -4,7 +4,7 @@ import time
 from typing import Optional, List
 from enum import Enum
 from pydantic import BaseModel, Field
-from groq import AsyncGroq
+from openai import AsyncAzureOpenAI
 from .logger import get_logger
 
 log = get_logger("llm")
@@ -82,8 +82,12 @@ class LLMBrain:
     """Conversational agent with call-turn memory."""
 
     def __init__(self):
-        self.client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
-        self.model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+        self.client = AsyncAzureOpenAI(
+            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT", ""),
+            api_key=os.getenv("AZURE_OPENAI_KEY", ""),
+            api_version="2024-02-01",
+        )
+        self.model = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini")
         self.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
     async def generate_response(self, user_text: str) -> str:
@@ -140,8 +144,16 @@ class RealEstateLead(BaseModel):
     lead_score: int = Field(0, ge=0, le=100, description="Quality score 0-100")
 
 
+def _azure_client() -> AsyncAzureOpenAI:
+    return AsyncAzureOpenAI(
+        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT", ""),
+        api_key=os.getenv("AZURE_OPENAI_KEY", ""),
+        api_version="2024-02-01",
+    )
+
+
 async def extract_lead_info(transcript: str) -> RealEstateLead:
-    client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
+    client = _azure_client()
     extraction_prompt = f"""
 Analyze this real estate call transcript and extract information in JSON format.
 
@@ -166,7 +178,7 @@ Return ONLY valid JSON, no explanation.
     start = time.monotonic()
     try:
         response = await client.chat.completions.create(
-            model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
+            model=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
             messages=[{"role": "user", "content": extraction_prompt}],
             temperature=0.1,
             response_format={"type": "json_object"},
@@ -234,7 +246,7 @@ Rules:
 
 
 async def generate_followup_message(transcript: str, lead: dict) -> str:
-    client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
+    client = _azure_client()
     context = {
         "transcript": (transcript or "")[:4000],
         "name": lead.get("name"),
@@ -251,7 +263,7 @@ async def generate_followup_message(transcript: str, lead: dict) -> str:
         "Write the WhatsApp follow-up message:"
     )
     response = await client.chat.completions.create(
-        model=os.getenv("GROQ_WHATSAPP_MODEL", "groq/compound-mini"),
+        model=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7,
         max_tokens=300,
@@ -265,7 +277,7 @@ async def generate_template_variables(transcript: str, lead: dict) -> dict:
     Returns {"1": ..., "2": ..., "3": ...} matching {{1}}, {{2}}, {{3}}:
       1 = customer name, 2 = property discussed, 3 = suggested next step.
     """
-    client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
+    client = _azure_client()
     context = {
         "transcript": (transcript or "")[:4000],
         "lead": {k: v for k, v in (lead or {}).items() if v not in (None, "", [])},
@@ -281,7 +293,7 @@ async def generate_template_variables(transcript: str, lead: dict) -> dict:
     content = None
     try:
         response = await client.chat.completions.create(
-            model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
+            model=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.4,
             max_tokens=150,
@@ -291,7 +303,7 @@ async def generate_template_variables(transcript: str, lead: dict) -> dict:
     except Exception:
         log.warning("json mode failed — retrying without response_format")
         response = await client.chat.completions.create(
-            model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
+            model=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.4,
             max_tokens=150,

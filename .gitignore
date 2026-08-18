@@ -4,3 +4,10 @@
 venv/
 __pycache__/
 *.pyc
+*.pyo
+.python-version
+frontend/node_modules/
+frontend/dist/
+.kilo/
+*.mp3
+*.wav

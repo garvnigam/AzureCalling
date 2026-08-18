@@ -1,4 +1,8 @@
 import os
+import json
+import base64
+import asyncio
+import time
 from fastapi import FastAPI, WebSocket, Request, WebSocketDisconnect, Depends, HTTPException
 from fastapi.responses import Response, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -9,8 +13,11 @@ from services.auth_service import (
     hash_password, verify_password, create_token, get_current_user,
 )
 from services.call_service import (
-    build_gather_response, build_error_hangup, make_outbound_call,
+    build_stream_response, build_error_hangup, make_outbound_call,
+    SILENCE_THRESHOLD, SILENCE_TIMEOUT,
 )
+from services.stt_service import transcribe_audio, chunk_energy
+from services.tts_service import synthesize_to_mulaw
 from services.whatsapp_service import send_whatsapp, send_followup_whatsapp
 from datetime import datetime, timezone
 from dotenv import load_dotenv
@@ -199,92 +206,166 @@ async def handle_incoming_call(request: Request):
     from_number = form_data.get("From", "")
     base_url = _get_base_url(request)
 
-    # Only initialize on first hit (not on silence-redirect)
-    if call_sid not in _calls:
-        try:
-            user_id = request.query_params.get("user_id") or await _default_user_id()
-            call_id = await db.create_call(
-                user_id=user_id,
-                agent_id=os.getenv("DEFAULT_AGENT_ID", "default"),
-                twilio_sid=call_sid,
-                direction="inbound",
-            )
-        except Exception as e:
-            log.warning("db create_call error (continuing): %s", e)
-            import uuid
-            call_id = str(uuid.uuid4())
-
-        llm = LLMBrain()
-        _calls[call_sid] = {
-            "call_id": call_id,
-            "llm": llm,
-            "from_number": from_number,
-            "transcript": [],
-            "turn_count": 0,
-            "start_time": datetime.now(timezone.utc),
-        }
-        await manager.broadcast({"type": "call_started", "call_id": call_id,
-                                  "timestamp": datetime.now(timezone.utc).isoformat()})
-        agent = os.getenv("AGENT_NAME", "Shyam Dhar Dubey")
-        company = os.getenv("COMPANY_NAME", "Realty Siksha")
-        greeting = (
-            f"Hello! I'm {agent} calling from {company}. "
-            f"We are a real estate consultancy specializing in properties in Greater Noida. "
-            f"Is this a good time to talk?"
+    try:
+        user_id = request.query_params.get("user_id") or await _default_user_id()
+        call_id = await db.create_call(
+            user_id=user_id,
+            agent_id=os.getenv("DEFAULT_AGENT_ID", "default"),
+            twilio_sid=call_sid,
+            direction="inbound",
         )
-        _calls[call_sid]["transcript"].append(f"Agent: {greeting}")
-        log.info("call %s — greeting", call_sid)
-        return build_gather_response(greeting, base_url)
+    except Exception as e:
+        log.warning("db create_call error (continuing): %s", e)
+        import uuid
+        call_id = str(uuid.uuid4())
 
-    # Silence re-prompt
-    log.info("call %s — silence re-prompt", call_sid)
-    return build_gather_response("Hello? Are you there?", base_url)
+    _calls[call_sid] = {
+        "call_id": call_id,
+        "llm": LLMBrain(),
+        "from_number": from_number,
+        "transcript": [],
+        "turn_count": 0,
+        "start_time": datetime.now(timezone.utc),
+    }
+    log.info("call %s — connecting media stream", call_sid)
+    return build_stream_response(call_sid, base_url)
 
 
-@app.post("/handle-speech")
-async def handle_speech(request: Request):
-    form_data = await request.form()
-    call_sid = form_data.get("CallSid", "unknown")
-    speech_result = form_data.get("SpeechResult", "")
-    base_url = _get_base_url(request)
-
-    log.info("call %s | User: %s", call_sid, speech_result)
-
+@app.websocket("/media-stream/{call_sid}")
+async def media_stream_ws(websocket: WebSocket, call_sid: str):
+    await websocket.accept()
     state = _calls.get(call_sid)
     if not state:
-        return build_error_hangup()
+        await websocket.close()
+        return
 
-    state["turn_count"] += 1
-    state["transcript"].append(f"User: {speech_result}")
-    call_id = state["call_id"]
+    stream_sid = None
+    audio_buffer = bytearray()
+    has_speech = False
+    last_speech_ts = 0.0
+    is_agent_speaking = False
+    processing = asyncio.Lock()
 
-    await manager.broadcast({"type": "transcript", "call_id": call_id,
-                              "speaker": "user", "text": speech_result,
-                              "timestamp": datetime.now(timezone.utc).isoformat()})
+    async def _send_audio(mulaw_bytes: bytes):
+        if not mulaw_bytes or not stream_sid:
+            return
+        chunk_size = 160
+        for i in range(0, len(mulaw_bytes), chunk_size):
+            chunk = mulaw_bytes[i:i + chunk_size]
+            try:
+                await websocket.send_json({
+                    "event": "media",
+                    "streamSid": stream_sid,
+                    "media": {"payload": base64.b64encode(chunk).decode()},
+                })
+            except Exception:
+                return
+            await asyncio.sleep(0.02)
+
+    async def _process_speech():
+        nonlocal audio_buffer, has_speech, is_agent_speaking
+        async with processing:
+            if not has_speech:
+                return
+            captured = bytes(audio_buffer)
+            audio_buffer.clear()
+            has_speech = False
+
+            transcript = await transcribe_audio(captured)
+            if not transcript:
+                return
+
+            call_id = state["call_id"]
+            log.info("call %s | User: %s", call_sid, transcript)
+            state["turn_count"] += 1
+            state["transcript"].append(f"User: {transcript}")
+            await manager.broadcast({"type": "transcript", "call_id": call_id,
+                                      "speaker": "user", "text": transcript,
+                                      "timestamp": datetime.now(timezone.utc).isoformat()})
+            try:
+                await db.save_turn(call_id, state["turn_count"], "user", transcript)
+            except Exception:
+                pass
+
+            try:
+                agent_response = await state["llm"].generate_response(transcript)
+            except Exception:
+                log.exception("LLM error")
+                agent_response = "I'm sorry, could you please repeat that?"
+
+            log.info("call %s | Agent: %s", call_sid, agent_response)
+            state["turn_count"] += 1
+            state["transcript"].append(f"Agent: {agent_response}")
+            await manager.broadcast({"type": "transcript", "call_id": call_id,
+                                      "speaker": "agent", "text": agent_response,
+                                      "timestamp": datetime.now(timezone.utc).isoformat()})
+            try:
+                await db.save_turn(call_id, state["turn_count"], "agent", agent_response)
+            except Exception:
+                pass
+
+            is_agent_speaking = True
+            audio_out = await synthesize_to_mulaw(agent_response)
+            await _send_audio(audio_out)
+            is_agent_speaking = False
+
+    async def _silence_watcher():
+        while True:
+            await asyncio.sleep(0.1)
+            if (has_speech
+                    and not is_agent_speaking
+                    and not processing.locked()
+                    and time.monotonic() - last_speech_ts > SILENCE_TIMEOUT):
+                await _process_speech()
+
+    silence_task = asyncio.create_task(_silence_watcher())
+
     try:
-        await db.save_turn(call_id, state["turn_count"], "user", speech_result)
-    except Exception:
-        pass
+        while True:
+            try:
+                raw = await websocket.receive_text()
+            except WebSocketDisconnect:
+                break
+            message = json.loads(raw)
+            event = message.get("event")
 
-    try:
-        agent_response = await state["llm"].generate_response(speech_result)
-    except Exception as e:
-        log.exception("LLM error")
-        agent_response = "I'm sorry, could you please repeat that?"
+            if event == "start":
+                stream_sid = message["start"]["streamSid"]
+                log.info("media stream started: %s (call %s)", stream_sid, call_sid)
 
-    log.info("call %s | Agent: %s", call_sid, agent_response)
-    state["turn_count"] += 1
-    state["transcript"].append(f"Agent: {agent_response}")
+                agent = os.getenv("AGENT_NAME", "Shyam Dhar Dubey")
+                company = os.getenv("COMPANY_NAME", "RealtySiksha")
+                greeting = (
+                    f"Hello! I'm {agent} calling from {company}. "
+                    f"We are a real estate consultancy specializing in properties "
+                    f"in Greater Noida. Is this a good time to talk?"
+                )
+                state["transcript"].append(f"Agent: {greeting}")
+                await manager.broadcast({"type": "call_started",
+                                          "call_id": state["call_id"],
+                                          "timestamp": datetime.now(timezone.utc).isoformat()})
+                is_agent_speaking = True
+                greeting_audio = await synthesize_to_mulaw(greeting)
+                await _send_audio(greeting_audio)
+                is_agent_speaking = False
 
-    await manager.broadcast({"type": "transcript", "call_id": call_id,
-                              "speaker": "agent", "text": agent_response,
-                              "timestamp": datetime.now(timezone.utc).isoformat()})
-    try:
-        await db.save_turn(call_id, state["turn_count"], "agent", agent_response)
-    except Exception:
-        pass
+            elif event == "media":
+                if not is_agent_speaking:
+                    payload = base64.b64decode(message["media"]["payload"])
+                    energy = chunk_energy(payload)
+                    if energy > SILENCE_THRESHOLD:
+                        has_speech = True
+                        last_speech_ts = time.monotonic()
+                        audio_buffer.extend(payload)
+                    elif has_speech:
+                        audio_buffer.extend(payload)
 
-    return build_gather_response(agent_response, base_url)
+            elif event == "stop":
+                log.info("media stream stop for %s", call_sid)
+                break
+
+    finally:
+        silence_task.cancel()
 
 
 @app.post("/call-status")
