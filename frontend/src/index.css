@@ -3,15 +3,35 @@
 @tailwind utilities;
 
 body {
-  @apply bg-bg text-white antialiased;
+  @apply bg-bg text-slate-100 antialiased;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #2d3154; border-radius: 8px; }
+::-webkit-scrollbar-thumb { background: #223052; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #2c3d68; }
 
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
 .pulse-dot { animation: pulse-dot 2s infinite; }
+
+/* Subtle grid backdrop for a professional feel */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(148,163,184,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,184,0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.logo-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
+  color: white;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px -8px rgba(37, 99, 235, 0.55);
+}

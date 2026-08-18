@@ -48,16 +48,24 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6 relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 bg-grid opacity-40" />
       <div className="pointer-events-none absolute inset-0"
-        style={{ background: 'radial-gradient(circle at 50% 30%, rgba(124,92,252,0.1) 0%, transparent 55%)' }} />
+        style={{ background: 'radial-gradient(circle at 50% 30%, rgba(37,99,235,0.14) 0%, transparent 55%)' }} />
       <div className="relative z-10 w-full max-w-sm">
-        <div className="flex justify-center mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-accent to-accent-2 flex items-center justify-center text-2xl shadow-glow">🏠</div>
+        <div className="flex flex-col items-center mb-6">
+          <span className="logo-mark" style={{ width: 56, height: 56 }}>
+            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 11.5 12 4l9 7.5" />
+              <path d="M5 10v9h14v-9" />
+              <path d="M10 19v-5h4v5" />
+            </svg>
+          </span>
+          <div className="mt-3 font-display font-semibold tracking-tightest">Realty Siksha</div>
         </div>
-        <h1 className="text-center text-2xl font-bold tracking-tight mb-1">
+        <h1 className="text-center text-2xl font-bold tracking-tightest mb-1 font-display">
           {mode === 'login' ? 'Welcome back' : 'Create your account'}
         </h1>
-        <p className="text-center text-gray-400 text-sm mb-8">
+        <p className="text-center text-slate-400 text-sm mb-8">
           {mode === 'login' ? 'Sign in to your dashboard' : 'Sign up — your account is saved for future logins'}
         </p>
         <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-surface-2 border border-border mb-5">

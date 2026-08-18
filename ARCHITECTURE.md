@@ -1,6 +1,6 @@
-# AI Calling Agent — Architecture & Study Guide
+# RealtySiksha — Architecture & Study Guide
 
-> Real-estate voice bot for GS Associates (Greater Noida). Twilio (voice) + Groq (LLM) +
+> Real-estate voice bot for RealtySiksha (Greater Noida). Twilio (voice) + Groq (LLM) +
 > Supabase (Postgres) + FastAPI + React. Runs locally via ngrok; optionally deploys to Azure.
 
 ---
@@ -182,7 +182,7 @@ GROQ_API_KEY                             # gsk_HITL... (LLM)
 GROQ_MODEL / GROQ_WHATSAPP_MODEL         # openai/gpt-oss-120b / groq/compound-mini
 SUPABASE_URL / SUPABASE_KEY              # Postgres REST endpoint + anon key
 PUBLIC_URL                               # ngrok URL (rewritten by start.sh every boot)
-AGENT_NAME / COMPANY_NAME                # "Shyam Dhar Dubey" / "GS Associates"
+AGENT_NAME / COMPANY_NAME                # "Shyam Dhar Dubey" / "RealtySiksha"
 DEFAULT_USER_ID / DEFAULT_AGENT_ID       # fallback UUIDs for call attribution
 JWT_SECRET                               # auth signing key (set!)
 ```
