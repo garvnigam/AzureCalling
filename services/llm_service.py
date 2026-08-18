@@ -85,9 +85,9 @@ class LLMBrain:
         self.client = AsyncAzureOpenAI(
             azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT", ""),
             api_key=os.getenv("AZURE_OPENAI_KEY", ""),
-            api_version="2024-02-01",
+            api_version="2024-10-21",
         )
-        self.model = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini")
+        self.model = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1-mini")
         self.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
     async def generate_response(self, user_text: str) -> str:
@@ -148,7 +148,7 @@ def _azure_client() -> AsyncAzureOpenAI:
     return AsyncAzureOpenAI(
         azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT", ""),
         api_key=os.getenv("AZURE_OPENAI_KEY", ""),
-        api_version="2024-02-01",
+        api_version="2024-10-21",
     )
 
 
