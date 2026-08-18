@@ -23,26 +23,8 @@ jobs:
           npm ci
           npm run build
 
-      - name: Create deployment zip
-        run: |
-          zip -r deploy.zip . \
-            -x "*.git*" \
-            -x "frontend/node_modules/*" \
-            -x "venv/*" \
-            -x "*/__pycache__/*"
-
-      - name: Deploy to Azure via Kudu Zip Deploy
-        env:
-          KUDU_USER: ${{ secrets.AZURE_KUDU_USER }}
-          KUDU_PWD: ${{ secrets.AZURE_KUDU_PWD }}
-        run: |
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-            "https://app-realtysiksha-ezhkg9cqhmbwaabb.scm.centralindia-01.azurewebsites.net/api/zipdeploy" \
-            --user "$KUDU_USER:$KUDU_PWD" \
-            --data-binary @deploy.zip \
-            -H "Content-Type: application/octet-stream")
-          echo "Kudu response: $HTTP_CODE"
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "Deployment failed with HTTP $HTTP_CODE"
-            exit 1
-          fi
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
