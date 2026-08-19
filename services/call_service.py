@@ -39,8 +39,13 @@ def build_stream_response(call_sid: str, base_url: str) -> Response:
     """Connect the call to a Media Streams WebSocket for real-time audio."""
     ws_url = base_url.replace("https://", "wss://").replace("http://", "ws://")
     response = VoiceResponse()
+    response.say("Connecting you now, please hold.", voice="Polly.Aditi", language="en-IN")
     connect = response.connect()
-    connect.stream(url=f"{ws_url}/media-stream/{call_sid}")
+    connect.stream(
+        url=f"{ws_url}/media-stream/{call_sid}",
+        status_callback=f"{base_url}/stream-status",
+        status_callback_method="POST",
+    )
     twiml = str(response)
     log.info("stream twiml for %s: %s", call_sid, twiml[:200])
     return Response(content=twiml, media_type="application/xml")

@@ -1,7 +1,8 @@
 import os
 import io
 import wave
-import audioop
+import struct
+import math
 import aiohttp
 from .logger import get_logger
 
@@ -10,9 +11,39 @@ log = get_logger("stt")
 SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION", "centralindia")
 SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY", "")
 
+# mulaw decode table (ITU-T G.711)
+_MULAW_DECODE = None
+
+def _build_mulaw_table():
+    global _MULAW_DECODE
+    if _MULAW_DECODE is not None:
+        return
+    table = []
+    for u in range(256):
+        u = ~u & 0xFF
+        sign = u & 0x80
+        exp = (u >> 4) & 0x07
+        mantissa = u & 0x0F
+        linear = (mantissa << 1 | 0x21) << exp
+        linear -= 33
+        table.append(-linear if sign else linear)
+    _MULAW_DECODE = table
+
+def _ulaw2lin(mulaw_bytes: bytes) -> bytes:
+    _build_mulaw_table()
+    samples = [_MULAW_DECODE[b] for b in mulaw_bytes]
+    return struct.pack(f"<{len(samples)}h", *samples)
+
+def _rms(pcm_bytes: bytes) -> int:
+    if len(pcm_bytes) < 2:
+        return 0
+    samples = struct.unpack(f"<{len(pcm_bytes) // 2}h", pcm_bytes[:len(pcm_bytes) & ~1])
+    mean_sq = sum(s * s for s in samples) / len(samples)
+    return int(math.sqrt(mean_sq))
+
 
 def mulaw_to_wav(mulaw_bytes: bytes) -> bytes:
-    pcm = audioop.ulaw2lin(mulaw_bytes, 2)
+    pcm = _ulaw2lin(mulaw_bytes)
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
         wf.setnchannels(1)
@@ -26,8 +57,8 @@ def chunk_energy(mulaw_bytes: bytes) -> int:
     if not mulaw_bytes:
         return 0
     try:
-        pcm = audioop.ulaw2lin(mulaw_bytes, 2)
-        return audioop.rms(pcm, 2)
+        pcm = _ulaw2lin(mulaw_bytes)
+        return _rms(pcm)
     except Exception:
         return 0
 

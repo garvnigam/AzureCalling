@@ -20,12 +20,29 @@ done
 
 cd "$SCRIPT_DIR"
 
-# ── Activate venv ──────────────────────────────────────────────────────────
+# ── Activate venv using Python 3.12 (create if missing) ───────────────────
+PYTHON_BIN=$(which python3.13 2>/dev/null || which python3.12 2>/dev/null || echo "python3")
 if [ ! -d "venv" ]; then
-    echo "ERROR: venv not found."
-    exit 1
+    echo "▶  venv not found — creating with $($PYTHON_BIN --version)..."
+    "$PYTHON_BIN" -m venv venv
 fi
 source venv/bin/activate
+
+echo "▶  Installing/verifying dependencies..."
+pip install -q --prefer-binary -r requirements.txt
+if [ $? -ne 0 ]; then
+    echo "ERROR: pip install failed. Trying without version pins..."
+    pip install -q --prefer-binary fastapi uvicorn gunicorn twilio supabase python-dotenv python-multipart websockets pydantic aiohttp openai PyJWT numpy
+fi
+echo "   Dependencies ready ✓"
+
+# ── Build frontend ────────────────────────────────────────────────────────
+echo "▶  Building frontend..."
+cd "$SCRIPT_DIR/frontend"
+npm install --silent 2>&1 | tail -3
+npm run build 2>&1 | tail -5
+cd "$SCRIPT_DIR"
+echo "   Frontend built ✓"
 
 # ── Kill existing server ───────────────────────────────────────────────────
 echo "▶  Clearing port 8000..."
@@ -35,7 +52,12 @@ sleep 1
 
 # ── Start ngrok tunnel ─────────────────────────────────────────────────────
 echo "▶  Starting ngrok tunnel..."
-ngrok http 8000 --log=stdout > "$LOG_DIR/ngrok.log" 2>&1 &
+NGROK_DOMAIN=$(grep "^NGROK_DOMAIN=" "$SCRIPT_DIR/.env" 2>/dev/null | cut -d= -f2)
+if [ -n "$NGROK_DOMAIN" ]; then
+    ngrok http --url="$NGROK_DOMAIN" 8000 --log=stdout > "$LOG_DIR/ngrok.log" 2>&1 &
+else
+    ngrok http 8000 --log=stdout > "$LOG_DIR/ngrok.log" 2>&1 &
+fi
 TUNNEL_PID=$!
 
 echo "   Waiting for public URL..."
@@ -68,13 +90,13 @@ echo "   .env updated with PUBLIC_URL ✓"
 
 # ── Start FastAPI server (now with correct PUBLIC_URL in .env) ─────────────
 echo "▶  Starting FastAPI server..."
-uvicorn main:app --reload --port 8000 > "$LOG_DIR/server.log" 2>&1 &
+"$SCRIPT_DIR/venv/bin/uvicorn" main:app --port 8000 --log-level info 2>&1 | tee "$LOG_DIR/server.log" &
 UVICORN_PID=$!
 
 echo "   Waiting for server to be ready..."
 READY=0
 for i in $(seq 1 20); do
-    if curl -s http://localhost:8000/ > /dev/null 2>&1; then
+    if curl -s http://localhost:8000/health > /dev/null 2>&1; then
         READY=1
         break
     fi
@@ -82,8 +104,7 @@ for i in $(seq 1 20); do
 done
 
 if [ $READY -eq 0 ]; then
-    echo "ERROR: Server did not start. Logs:"
-    cat "$LOG_DIR/server.log"
+    echo "ERROR: Server did not start in time. Check output above or $LOG_DIR/server.log"
     kill $UVICORN_PID $TUNNEL_PID 2>/dev/null
     exit 1
 fi
@@ -112,6 +133,7 @@ if [ -n "$PHONE_NUMBER" ]; then
 fi
 
 echo "   Press Ctrl+C to stop everything."
+echo "   Logs streaming below — watch for [STEP 1] through [STEP 12] when a call is made."
 echo ""
 
 # ── Cleanup on Ctrl+C ──────────────────────────────────────────────────────
@@ -125,4 +147,4 @@ cleanup() {
 }
 trap cleanup INT TERM
 
-tail -f "$LOG_DIR/server.log"
+wait $UVICORN_PID

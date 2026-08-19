@@ -199,12 +199,20 @@ async def _default_user_id() -> str:
     return os.getenv("DEFAULT_USER_ID", "default")
 
 
+@app.post("/stream-status")
+async def stream_status(request: Request):
+    form = await request.form()
+    log.info("[STREAM-STATUS] %s", dict(form))
+    return Response(status_code=204)
+
+
 @app.post("/incoming-call")
 async def handle_incoming_call(request: Request):
     form_data = await request.form()
     call_sid = form_data.get("CallSid", "unknown")
     from_number = form_data.get("From", "")
     base_url = _get_base_url(request)
+    log.info("[STEP 1] /incoming-call received | call_sid=%s from=%s base_url=%s", call_sid, from_number, base_url)
 
     try:
         user_id = request.query_params.get("user_id") or await _default_user_id()
@@ -214,30 +222,43 @@ async def handle_incoming_call(request: Request):
             twilio_sid=call_sid,
             direction="inbound",
         )
+        log.info("[STEP 2] db.create_call OK | call_id=%s", call_id)
     except Exception as e:
-        log.warning("db create_call error (continuing): %s", e)
+        log.warning("[STEP 2] db.create_call FAILED (continuing): %s", e)
         import uuid
         call_id = str(uuid.uuid4())
 
-    _calls[call_sid] = {
-        "call_id": call_id,
-        "llm": LLMBrain(),
-        "from_number": from_number,
-        "transcript": [],
-        "turn_count": 0,
-        "start_time": datetime.now(timezone.utc),
-    }
-    log.info("call %s — connecting media stream", call_sid)
-    return build_stream_response(call_sid, base_url)
+    try:
+        _calls[call_sid] = {
+            "call_id": call_id,
+            "llm": LLMBrain(),
+            "from_number": from_number,
+            "transcript": [],
+            "turn_count": 0,
+            "start_time": datetime.now(timezone.utc),
+        }
+        log.info("[STEP 3] call state created | _calls has %d active calls", len(_calls))
+    except Exception as e:
+        log.error("[STEP 3] FAILED to create call state: %s", e, exc_info=True)
+        from services.call_service import build_error_hangup
+        return build_error_hangup()
+
+    twiml_response = build_stream_response(call_sid, base_url)
+    log.info("[STEP 4] returning stream TwiML to Twilio")
+    return twiml_response
 
 
 @app.websocket("/media-stream/{call_sid}")
 async def media_stream_ws(websocket: WebSocket, call_sid: str):
+    log.info("[STEP 5] WebSocket connection attempt | call_sid=%s active_calls=%s", call_sid, list(_calls.keys()))
     await websocket.accept()
+    log.info("[STEP 6] WebSocket accepted | call_sid=%s", call_sid)
     state = _calls.get(call_sid)
     if not state:
+        log.error("[STEP 6] call_sid=%s NOT FOUND in _calls — closing WebSocket immediately", call_sid)
         await websocket.close()
         return
+    log.info("[STEP 7] call state found | call_id=%s", state["call_id"])
 
     stream_sid = None
     audio_buffer = bytearray()
@@ -325,13 +346,18 @@ async def media_stream_ws(websocket: WebSocket, call_sid: str):
             try:
                 raw = await websocket.receive_text()
             except WebSocketDisconnect:
+                log.info("[STEP] WebSocket disconnected by Twilio | call_sid=%s", call_sid)
                 break
             message = json.loads(raw)
             event = message.get("event")
+            log.debug("[STEP] WS event=%s | call_sid=%s", event, call_sid)
 
-            if event == "start":
+            if event == "connected":
+                log.info("[STEP 8] Twilio connected event received | call_sid=%s", call_sid)
+
+            elif event == "start":
                 stream_sid = message["start"]["streamSid"]
-                log.info("media stream started: %s (call %s)", stream_sid, call_sid)
+                log.info("[STEP 9] media stream started | stream_sid=%s call_sid=%s", stream_sid, call_sid)
 
                 agent = os.getenv("AGENT_NAME", "Shyam Dhar Dubey")
                 company = os.getenv("COMPANY_NAME", "RealtySiksha")
@@ -344,9 +370,12 @@ async def media_stream_ws(websocket: WebSocket, call_sid: str):
                 await manager.broadcast({"type": "call_started",
                                           "call_id": state["call_id"],
                                           "timestamp": datetime.now(timezone.utc).isoformat()})
+                log.info("[STEP 10] calling TTS for greeting (%d chars)", len(greeting))
                 is_agent_speaking = True
                 greeting_audio = await synthesize_to_mulaw(greeting)
+                log.info("[STEP 11] TTS done | audio_bytes=%d stream_sid=%s", len(greeting_audio), stream_sid)
                 await _send_audio(greeting_audio)
+                log.info("[STEP 12] greeting audio sent to Twilio")
                 is_agent_speaking = False
 
             elif event == "media":
@@ -361,10 +390,11 @@ async def media_stream_ws(websocket: WebSocket, call_sid: str):
                         audio_buffer.extend(payload)
 
             elif event == "stop":
-                log.info("media stream stop for %s", call_sid)
+                log.info("[STEP] media stream stop event | call_sid=%s", call_sid)
                 break
 
     finally:
+        log.info("[STEP] WebSocket handler ending | call_sid=%s", call_sid)
         silence_task.cancel()
 
 
